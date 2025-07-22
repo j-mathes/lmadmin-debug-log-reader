@@ -8,12 +8,11 @@ This Python script parses FlexNet `lmadmin` debug logs to generate a summary of 
 
 ## 🔧 Features
 
-- Extracts license checkouts (`OUT`) and check-ins (`IN`) from `lmadmin` debug logs
-- Aggregates usage data by feature and timestamp
-- Outputs a CSV summary showing:
+- Parses `OUT:` and `IN:` entries from `lmadmin` debug logs
+- Tracks license checkouts and returns by feature
+- Outputs a **text file** summarizing:
   - Feature name
-  - Number of licenses checked out
-  - Number of licenses returned
+  - Number of checkouts and returns
   - Timestamps of activity
 
 ---
