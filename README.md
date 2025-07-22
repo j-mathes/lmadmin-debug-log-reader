@@ -29,11 +29,33 @@ This Python script parses FlexNet `lmadmin` debug logs to generate a summary of 
 
 ## 📤 Output
 
-- **CSV File**: A summary file named `feature_usage_summary.csv` containing:
+- **Text File**: The script generates a summary file named using the current timestamp. For example:
   ```
-  Feature, Checked Out, Returned, First Seen, Last Seen
+  2025-07-22_10-45-03_feature_report.txt
   ```
+- The file includes detailed usage data, structured like:
+```
+lmadmin Feature Usage Summary (Generated on 2025-07-22 10:51:16 from log file D:/Temp/logs/geoslope (1).log)
 
+Date: 2022-12-31
+  Count: 13, Feature: pkc_geostudio
+  Count: 13, Feature: pkc_slopew
+  Count: 3, DENIED: pkc_geostudio, (Licensed number of users already reached. (-4,342))
+  Count: 3, DENIED: pkc_slopew, (Licensed number of users already reached. (-4,342))
+  Count: 5, UNSUPPORTED: pkc_basic, (No such feature exists. (-5,346))
+  Count: 1, UNSUPPORTED: pkc_modeler3d, (No such feature exists. (-5,346))
+  Count: 4, UNSUPPORTED: pkc_seepw, (No such feature exists. (-5,346))
+
+Date: 2024-12-31
+  Count: 16, Feature: pkc_geostudio
+  Count: 4, Feature: pkc_seepw
+  Count: 13, Feature: pkc_slopew
+  Count: 15, DENIED: pkc_geostudio, (Licensed number of users already reached. (-4,342))
+  Count: 1, DENIED: pkc_seepw, (Licensed number of users already reached. (-4,342))
+  Count: 11, DENIED: pkc_slopew, (Licensed number of users already reached. (-4,342))
+  Count: 7, UNSUPPORTED: pkc_basic, (No such feature exists. (-5,346))
+  Count: 1, UNSUPPORTED: pkc_modeler3d, (No such feature exists. (-5,346))
+```
 ---
 
 ## 🚀 Usage
