@@ -391,25 +391,48 @@ function destroyChart() {
 // ═══════════════════════════════════════════════════════════════════════════════
 // Report tab
 // ═══════════════════════════════════════════════════════════════════════════════
+
 function generateReport() {
     const type      = el('report-type').value;
+    const format    = el('export-format').value;
     const pfx       = State.settings.featurePrefix;
     const events    = pfx
         ? State.events.filter(e => e.feature.startsWith(pfx))
         : State.events;
     const sourceStr = State.loaded.map(f => f.name).join(', ') || 'No files loaded';
-    el('report-out').textContent = Reports.generate(type, events, sourceStr);
+    el('report-out').textContent = Reports.generate(type, events, sourceStr, format);
 }
 
 function exportReport() {
+    const type   = el('report-type').value;
+    const format = el('export-format').value;
+    const ext    = format === 'markdown' ? 'md' : 'txt';
+    const ts     = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+
+    if (type === 'all') {
+        if (State.events.length === 0) { toast('No data loaded.'); return; }
+        const pfx       = State.settings.featurePrefix;
+        const events    = pfx
+            ? State.events.filter(e => e.feature.startsWith(pfx))
+            : State.events;
+        const sourceStr = State.loaded.map(f => f.name).join(', ') || 'No files loaded';
+        // Stagger downloads 350 ms apart — simultaneous triggers get blocked by browsers.
+        Reports.TYPES.forEach(({ key }, i) =>
+            setTimeout(() => downloadBlob(
+                new Blob([Reports.generate(key, events, sourceStr, format)], { type: 'text/plain' }),
+                `${ts}_${key}.${ext}`
+            ), i * 350)
+        );
+        toast(`Exporting ${Reports.TYPES.length} .${ext} files\u2026`);
+        return;
+    }
+
     const text = el('report-out').textContent;
     if (!text || text.startsWith('Select a report type')) {
         toast('Generate a report first.');
         return;
     }
-    const ts   = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
-    const type = el('report-type').value;
-    downloadBlob(new Blob([text], { type: 'text/plain' }), `${ts}_${type}.txt`);
+    downloadBlob(new Blob([text], { type: 'text/plain' }), `${ts}_${type}.${ext}`);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

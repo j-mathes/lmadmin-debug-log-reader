@@ -1,149 +1,265 @@
 'use strict';
 
 /**
- * Reports — generates text-based reports from parsed event data.
- * All functions accept the full events array and return a formatted string.
+ * Reports — generates plain-text or Markdown reports from parsed event data.
+ *
+ * Every public method accepts an optional `format` argument: 'text' (default)
+ * or 'markdown'.  The top-level generate() method also handles type 'all',
+ * which concatenates every report type into a single combined document.
+ *
+ * Reports.TYPES is the canonical ordered list of report descriptors, shared
+ * with app.js for the "export all as separate files" feature.
  */
 const Reports = {
 
+    /** Ordered list of every individual report type. */
+    TYPES: [
+        { key: 'feature-by-date',  label: 'Feature Usage by Date'      },
+        { key: 'user-summary',     label: 'User Summary'                },
+        { key: 'computer-summary', label: 'Computer Summary'            },
+        { key: 'feature-totals',   label: 'Feature Totals (All Time)'   },
+        { key: 'denial-report',    label: 'Denial & Unsupported Report' },
+        { key: 'top-users',        label: 'Top Users by Checkout'       },
+        { key: 'top-features',     label: 'Top Features by Checkout'    },
+    ],
+
     /**
      * Main entry point.
-     * @param {string} type      - Report type key
+     * @param {string} type      - Report type key, or 'all'
      * @param {Array}  events    - All parsed events
      * @param {string} sourceStr - Comma-separated list of loaded filenames
+     * @param {string} [format]  - 'text' (default) or 'markdown'
      * @returns {string}
      */
-    generate(type, events, sourceStr) {
-        const now = new Date().toLocaleString();
-        const lines = [
-            'lmadmin Feature Usage Report',
-            `Generated : ${now}`,
-            `Source    : ${sourceStr || 'No files loaded'}`,
-            `Events    : ${events.length.toLocaleString()} total`,
-            '\u2550'.repeat(72),
-            ''
-        ];
+    generate(type, events, sourceStr, format = 'text') {
+        const isMd  = format === 'markdown';
+        const now   = new Date().toLocaleString();
+        const src   = sourceStr || 'No files loaded';
+        const count = events.length.toLocaleString();
 
-        switch (type) {
-            case 'feature-by-date':  lines.push(this.featureByDate(events));   break;
-            case 'user-summary':     lines.push(this.userSummary(events));      break;
-            case 'computer-summary': lines.push(this.computerSummary(events));  break;
-            case 'feature-totals':   lines.push(this.featureTotals(events));    break;
-            case 'denial-report':    lines.push(this.denialReport(events));     break;
-            case 'top-users':        lines.push(this.topUsers(events));         break;
-            case 'top-features':     lines.push(this.topFeatures(events));      break;
-            default:                 lines.push('Unknown report type.');
-        }
+        const header = isMd
+            ? [ '# lmadmin Feature Usage Report', '',
+                `**Generated:** ${now}  `,
+                `**Source:** ${src}  `,
+                `**Events:** ${count} total  `,
+                '', '---', '' ].join('\n')
+            : [ 'lmadmin Feature Usage Report',
+                `Generated : ${now}`,
+                `Source    : ${src}`,
+                `Events    : ${count} total`,
+                '\u2550'.repeat(72), '' ].join('\n');
 
-        return lines.join('\n');
+        const body = type === 'all'
+            ? this._all(events, format)
+            : this._body(type, events, format);
+
+        return header + body;
     },
 
-    /* ─── Feature Usage by Date ─────────────────────────────────────────── */
-    featureByDate(events) {
+    /* ── Combined "all" view ────────────────────────────────────────────────── */
+
+    _all(events, format) {
+        const isMd = format === 'markdown';
+        return this.TYPES.map(({ key, label }) => {
+            const divider = isMd
+                ? `## ${label}\n\n`
+                : `\n${'─'.repeat(72)}\n${label}\n${'─'.repeat(72)}\n\n`;
+            return divider + this._body(key, events, format) + '\n';
+        }).join('\n');
+    },
+
+    _body(type, events, format) {
+        switch (type) {
+            case 'feature-by-date':  return this.featureByDate(events, format);
+            case 'user-summary':     return this.userSummary(events, format);
+            case 'computer-summary': return this.computerSummary(events, format);
+            case 'feature-totals':   return this.featureTotals(events, format);
+            case 'denial-report':    return this.denialReport(events, format);
+            case 'top-users':        return this.topUsers(events, format);
+            case 'top-features':     return this.topFeatures(events, format);
+            default:                 return 'Unknown report type.';
+        }
+    },
+
+    /* ── Feature Usage by Date ─────────────────────────────────────────────── */
+
+    featureByDate(events, format = 'text') {
         const byDate = {};
         for (const e of events) {
             if (!byDate[e.date]) byDate[e.date] = {};
-            if (!byDate[e.date][e.feature]) byDate[e.date][e.feature] = { OUT: 0, DENIED: 0, UNSUPPORTED: 0 };
-            const cell = byDate[e.date][e.feature];
-            if (cell[e.action] !== undefined) cell[e.action]++;
+            if (!byDate[e.date][e.feature])
+                byDate[e.date][e.feature] = { OUT: 0, DENIED: 0, UNSUPPORTED: 0 };
+            const c = byDate[e.date][e.feature];
+            if (c[e.action] !== undefined) c[e.action]++;
+        }
+        const dates = Object.keys(byDate).sort();
+        if (!dates.length) return 'No events found.';
+
+        if (format === 'markdown') {
+            const parts = [];
+            for (const date of dates) {
+                parts.push(`### ${date}\n`);
+                parts.push('| Feature | Checkouts | Denied | Unsupported |');
+                parts.push('|:---|---:|---:|---:|');
+                for (const feat of Object.keys(byDate[date]).sort()) {
+                    const c = byDate[date][feat];
+                    if (c.OUT + c.DENIED + c.UNSUPPORTED > 0)
+                        parts.push(`| \`${feat}\` | ${c.OUT} | ${c.DENIED} | ${c.UNSUPPORTED} |`);
+                }
+                parts.push('');
+            }
+            return parts.join('\n');
         }
 
         const out = [];
-        for (const date of Object.keys(byDate).sort()) {
+        for (const date of dates) {
             out.push(`Date: ${date}`);
-            const usageLines = [], deniedLines = [], unsuppLines = [];
+            const usageL = [], deniedL = [], unsuppL = [];
             for (const feat of Object.keys(byDate[date]).sort()) {
                 const c = byDate[date][feat];
-                if (c.OUT        > 0) usageLines.push(`  Count: ${c.OUT}, Feature: ${feat}`);
-                if (c.DENIED     > 0) deniedLines.push(`  Count: ${c.DENIED}, DENIED: ${feat}, (Licensed number of users already reached. (-4,342))`);
-                if (c.UNSUPPORTED > 0) unsuppLines.push(`  Count: ${c.UNSUPPORTED}, UNSUPPORTED: ${feat}, (No such feature exists. (-5,346))`);
+                if (c.OUT        > 0) usageL.push(`  Count: ${c.OUT}, Feature: ${feat}`);
+                if (c.DENIED     > 0) deniedL.push(`  Count: ${c.DENIED}, DENIED: ${feat}, (Licensed number of users already reached. (-4,342))`);
+                if (c.UNSUPPORTED > 0) unsuppL.push(`  Count: ${c.UNSUPPORTED}, UNSUPPORTED: ${feat}, (No such feature exists. (-5,346))`);
             }
-            out.push(...usageLines, ...deniedLines, ...unsuppLines, '');
+            out.push(...usageL, ...deniedL, ...unsuppL, '');
         }
-        return out.join('\n') || 'No events found.';
+        return out.join('\n');
     },
 
-    /* ─── User Summary ──────────────────────────────────────────────────── */
-    userSummary(events) {
+    /* ── User Summary ──────────────────────────────────────────────────────── */
+
+    userSummary(events, format = 'text') {
         const byUser = {};
         for (const e of events) {
             if (e.action !== 'OUT') continue;
             if (!byUser[e.user]) byUser[e.user] = {};
             byUser[e.user][e.feature] = (byUser[e.user][e.feature] || 0) + 1;
         }
+        const users = Object.keys(byUser).sort();
+        if (!users.length) return 'No checkout events found.';
+
+        if (format === 'markdown') {
+            const parts = [];
+            for (const user of users) {
+                const feats = byUser[user];
+                const total = Object.values(feats).reduce((a, b) => a + b, 0);
+                parts.push(`### ${user} \u2014 ${total} checkouts\n`);
+                parts.push('| Feature | Count |');
+                parts.push('|:---|---:|');
+                for (const feat of Object.keys(feats).sort())
+                    parts.push(`| \`${feat}\` | ${feats[feat]} |`);
+                parts.push('');
+            }
+            return parts.join('\n');
+        }
+
         const out = [];
-        for (const user of Object.keys(byUser).sort()) {
+        for (const user of users) {
             const feats = byUser[user];
             const total = Object.values(feats).reduce((a, b) => a + b, 0);
             out.push(`User: ${user}  (total checkouts: ${total})`);
-            for (const feat of Object.keys(feats).sort()) {
+            for (const feat of Object.keys(feats).sort())
                 out.push(`  ${feat}: ${feats[feat]}`);
-            }
             out.push('');
         }
-        return out.join('\n') || 'No checkout events found.';
+        return out.join('\n');
     },
 
-    /* ─── Computer Summary ──────────────────────────────────────────────── */
-    computerSummary(events) {
+    /* ── Computer Summary ──────────────────────────────────────────────────── */
+
+    computerSummary(events, format = 'text') {
         const byComp = {};
         for (const e of events) {
             if (e.action !== 'OUT') continue;
             if (!byComp[e.computer]) byComp[e.computer] = {};
             byComp[e.computer][e.feature] = (byComp[e.computer][e.feature] || 0) + 1;
         }
+        const comps = Object.keys(byComp).sort();
+        if (!comps.length) return 'No checkout events found.';
+
+        if (format === 'markdown') {
+            const parts = [];
+            for (const comp of comps) {
+                const feats = byComp[comp];
+                const total = Object.values(feats).reduce((a, b) => a + b, 0);
+                parts.push(`### ${comp} \u2014 ${total} checkouts\n`);
+                parts.push('| Feature | Count |');
+                parts.push('|:---|---:|');
+                for (const feat of Object.keys(feats).sort())
+                    parts.push(`| \`${feat}\` | ${feats[feat]} |`);
+                parts.push('');
+            }
+            return parts.join('\n');
+        }
+
         const out = [];
-        for (const comp of Object.keys(byComp).sort()) {
+        for (const comp of comps) {
             const feats = byComp[comp];
             const total = Object.values(feats).reduce((a, b) => a + b, 0);
             out.push(`Computer: ${comp}  (total checkouts: ${total})`);
-            for (const feat of Object.keys(feats).sort()) {
+            for (const feat of Object.keys(feats).sort())
                 out.push(`  ${feat}: ${feats[feat]}`);
-            }
             out.push('');
         }
-        return out.join('\n') || 'No checkout events found.';
+        return out.join('\n');
     },
 
-    /* ─── Feature Totals (all-time table) ───────────────────────────────── */
-    featureTotals(events) {
+    /* ── Feature Totals (All Time) ─────────────────────────────────────────── */
+
+    featureTotals(events, format = 'text') {
         const totals = {};
         for (const e of events) {
-            if (!totals[e.feature]) {
-                totals[e.feature] = { OUT: 0, DENIED: 0, UNSUPPORTED: 0, users: new Set(), computers: new Set() };
-            }
+            if (!totals[e.feature])
+                totals[e.feature] = { OUT: 0, DENIED: 0, UNSUPPORTED: 0,
+                                      users: new Set(), computers: new Set() };
             const t = totals[e.feature];
             if (t[e.action] !== undefined) t[e.action]++;
             if (e.action === 'OUT') { t.users.add(e.user); t.computers.add(e.computer); }
         }
+        const sorted = Object.entries(totals).sort((a, b) => b[1].OUT - a[1].OUT);
+        if (!sorted.length) return 'No events found.';
+
+        if (format === 'markdown') {
+            const rows = [
+                '| Feature | Checkouts | Denied | Unsupported | Unique Users | Computers |',
+                '|:---|---:|---:|---:|---:|---:|',
+            ];
+            for (const [feat, c] of sorted)
+                rows.push(`| \`${feat}\` | ${c.OUT} | ${c.DENIED} | ${c.UNSUPPORTED} | ${c.users.size} | ${c.computers.size} |`);
+            return rows.join('\n');
+        }
 
         const SEP = '\u2500';
-        const header = `${'Feature'.padEnd(38)}${'Checkouts'.padStart(10)}${'Denied'.padStart(8)}${'Unsupport'.padStart(10)}${'Users'.padStart(7)}${'Computers'.padStart(10)}`;
-        const rows = [header, SEP.repeat(83)];
-
-        const sorted = Object.entries(totals).sort((a, b) => b[1].OUT - a[1].OUT);
-        for (const [feat, c] of sorted) {
-            rows.push(
-                `${feat.padEnd(38)}` +
-                `${String(c.OUT).padStart(10)}` +
-                `${String(c.DENIED).padStart(8)}` +
-                `${String(c.UNSUPPORTED).padStart(10)}` +
-                `${String(c.users.size).padStart(7)}` +
-                `${String(c.computers.size).padStart(10)}`
-            );
-        }
+        const hdr = `${'Feature'.padEnd(38)}${'Checkouts'.padStart(10)}${'Denied'.padStart(8)}${'Unsupport'.padStart(10)}${'Users'.padStart(7)}${'Computers'.padStart(10)}`;
+        const rows = [hdr, SEP.repeat(83)];
+        for (const [feat, c] of sorted)
+            rows.push(`${feat.padEnd(38)}${String(c.OUT).padStart(10)}${String(c.DENIED).padStart(8)}${String(c.UNSUPPORTED).padStart(10)}${String(c.users.size).padStart(7)}${String(c.computers.size).padStart(10)}`);
         return rows.join('\n');
     },
 
-    /* ─── Denial & Unsupported Report ──────────────────────────────────── */
-    denialReport(events) {
+    /* ── Denial & Unsupported Report ───────────────────────────────────────── */
+
+    denialReport(events, format = 'text') {
         const relevant = events.filter(e => e.action === 'DENIED' || e.action === 'UNSUPPORTED');
-        if (relevant.length === 0) return 'No denial or unsupported events found.';
+        if (!relevant.length) return 'No denial or unsupported events found.';
 
         const byDate = {};
         for (const e of relevant) {
             if (!byDate[e.date]) byDate[e.date] = [];
             byDate[e.date].push(e);
+        }
+
+        if (format === 'markdown') {
+            const parts = [];
+            for (const date of Object.keys(byDate).sort()) {
+                parts.push(`### ${date}\n`);
+                parts.push('| Action | Feature | User@Computer |');
+                parts.push('|:---|:---|:---|');
+                for (const e of byDate[date])
+                    parts.push(`| **${e.action}** | \`${e.feature}\` | ${e.userComputer} |`);
+                parts.push('');
+            }
+            return parts.join('\n');
         }
 
         const out = [];
@@ -160,45 +276,51 @@ const Reports = {
         return out.join('\n');
     },
 
-    /* ─── Top Users ─────────────────────────────────────────────────────── */
-    topUsers(events, n = 30) {
+    /* ── Top Users ─────────────────────────────────────────────────────────── */
+
+    topUsers(events, format = 'text', n = 30) {
         const counts = {};
         for (const e of events) {
             if (e.action !== 'OUT') continue;
             counts[e.user] = (counts[e.user] || 0) + 1;
         }
         const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, n);
-        if (sorted.length === 0) return 'No checkout events found.';
+        if (!sorted.length) return 'No checkout events found.';
+
+        if (format === 'markdown') {
+            const rows = ['| Rank | User | Checkouts |', '|---:|:---|---:|'];
+            sorted.forEach(([user, cnt], i) => rows.push(`| ${i + 1} | ${user} | ${cnt} |`));
+            return rows.join('\n');
+        }
 
         const SEP = '\u2500';
-        const rows = [
-            `${'Rank'.padEnd(6)}${'User'.padEnd(34)}${'Checkouts'.padStart(10)}`,
-            SEP.repeat(50)
-        ];
+        const rows = [`${'Rank'.padEnd(6)}${'User'.padEnd(34)}${'Checkouts'.padStart(10)}`, SEP.repeat(50)];
         sorted.forEach(([user, cnt], i) =>
-            rows.push(`${String(i + 1).padEnd(6)}${user.padEnd(34)}${String(cnt).padStart(10)}`)
-        );
+            rows.push(`${String(i + 1).padEnd(6)}${user.padEnd(34)}${String(cnt).padStart(10)}`));
         return rows.join('\n');
     },
 
-    /* ─── Top Features ──────────────────────────────────────────────────── */
-    topFeatures(events, n = 30) {
+    /* ── Top Features ──────────────────────────────────────────────────────── */
+
+    topFeatures(events, format = 'text', n = 30) {
         const counts = {};
         for (const e of events) {
             if (e.action !== 'OUT') continue;
             counts[e.feature] = (counts[e.feature] || 0) + 1;
         }
         const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, n);
-        if (sorted.length === 0) return 'No checkout events found.';
+        if (!sorted.length) return 'No checkout events found.';
+
+        if (format === 'markdown') {
+            const rows = ['| Rank | Feature | Checkouts |', '|---:|:---|---:|'];
+            sorted.forEach(([feat, cnt], i) => rows.push(`| ${i + 1} | \`${feat}\` | ${cnt} |`));
+            return rows.join('\n');
+        }
 
         const SEP = '\u2500';
-        const rows = [
-            `${'Rank'.padEnd(6)}${'Feature'.padEnd(38)}${'Checkouts'.padStart(10)}`,
-            SEP.repeat(54)
-        ];
+        const rows = [`${'Rank'.padEnd(6)}${'Feature'.padEnd(38)}${'Checkouts'.padStart(10)}`, SEP.repeat(54)];
         sorted.forEach(([feat, cnt], i) =>
-            rows.push(`${String(i + 1).padEnd(6)}${feat.padEnd(38)}${String(cnt).padStart(10)}`)
-        );
+            rows.push(`${String(i + 1).padEnd(6)}${feat.padEnd(38)}${String(cnt).padStart(10)}`));
         return rows.join('\n');
-    }
+    },
 };

@@ -30,7 +30,9 @@ An interactive, browser-based GUI requiring no installation or server.
   - Denial & Unsupported Report
   - Top Users by Checkout
   - Top Features by Checkout
-- **Export** — save any report to `.txt`, export the chart as PNG
+  - **All Reports (Combined View)** — displays every report in one scrollable output
+- **Export format** — choose **Plain Text (.txt)** or **Markdown (.md)** before generating or exporting
+- **Export** — save any report to a file; "All Reports" triggers a separate download per type; export the chart as PNG
 - **Settings** (Settings tab):
   - Vendor daemon name (default: `geoslope`)
   - Feature prefix filter (default: `pkc_`)
