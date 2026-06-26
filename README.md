@@ -1,41 +1,91 @@
 # lmadmin Feature Usage Summary
 
-A Python script for parsing and analyzing lmadmin debug log files to generate comprehensive feature usage reports.
+Tools for parsing and analyzing lmadmin debug log files.  Two independent tools are provided:
+
+- **Web Viewer** (`index.html`) — interactive GUI with charts, filtering, and multiple report types
+- **CLI Script** (`lmadmin_feature_usage_summary.py`) — original command-line report generator
 
 ## Overview
 
-This tool processes lmadmin debug log files and extracts license feature usage information, including successful checkouts, denials, and unsupported feature requests. It generates a timestamped summary report showing usage patterns by date and feature.
+This repository contains two independent tools for analysing lmadmin debug log files.
 
-## Features
+---
 
-- **Log File Parsing**: Processes lmadmin debug log files with multiple date formats
-- **Usage Tracking**: Tracks feature checkouts (OUT), denials (DENIED), and unsupported requests (UNSUPPORTED)
-- **User/Computer Mapping**: Associates usage with specific user@computer combinations
-- **Date-based Reporting**: Organizes results by date for trend analysis
-- **Automated Report Generation**: Creates timestamped text reports with usage summaries
-- **GUI File Selection**: User-friendly file picker interface
+## Web Viewer (`index.html`)
 
-## Requirements
+An interactive, browser-based GUI requiring no installation or server.
+
+### Features
+
+- **Load multiple log files** — drag & drop or use File menu; data accumulates across files
+- **Interactive chart** — line, bar, or stacked-bar chart with dates on X-axis and counts on Y-axis
+- **Three view modes** — visualise usage by Feature, User, or Computer
+- **Summary cards** — instant totals for checkouts, unique features, users, computers, and denials
+- **Date range filter** — zoom into any time period without reloading
+- **Seven report types** (Report tab):
+  - Feature Usage by Date *(matches original Python output)*
+  - User Summary
+  - Computer Summary
+  - Feature Totals — sortable all-time table
+  - Denial & Unsupported Report
+  - Top Users by Checkout
+  - Top Features by Checkout
+- **Export** — save any report to `.txt`, export the chart as PNG
+- **Settings** (Settings tab):
+  - Vendor daemon name (default: `geoslope`)
+  - Feature prefix filter (default: `pkc_`)
+  - Light / dark theme
+  - Customisable chart colour palette (10 series colours)
+  - Default chart type and Top N
+  - Settings persisted to `localStorage`; importable/exportable as JSON
+
+### Quick Start
+
+1. Open `index.html` in a modern browser (Chrome, Edge, Firefox)
+2. Go to **File → Load Log File(s)** or drag `.log` files onto the window
+3. The chart and summary cards populate immediately
+4. Use the toolbar selectors to change the view; click **Apply**
+5. Switch to the **Report** tab to generate and export text reports
+6. Switch to **Settings** to configure the vendor daemon or appearance
+
+### File Layout
+
+```
+index.html          ← entry point
+css/
+  styles.css        ← all styling, light/dark themes
+js/
+  parser.js         ← log-file parser (mirrors Python logic)
+  reports.js        ← text report generators
+  app.js            ← main controller, chart, settings
+sample_logs/        ← place test log files here (not tracked by git)
+```
+
+### Supported Log Formats
+
+Same formats as the Python script:
+- `Start-Date: Mon Jan 15 2025 09:30:15 W. Pacific Standard Time`
+- `Time: Mon Jan 15 2025 09:30:15 W. Pacific Standard Time`
+- `TIMESTAMP 01/15/2025`
+
+---
+
+## CLI Script (`lmadmin_feature_usage_summary.py`)
+
+### Requirements
 
 - Python 3.6 or higher
-- tkinter (usually included with Python)
+- `tkinter` (included with standard Python on Windows)
 - No additional dependencies required
 
-## Installation
+### Installation
 
-1. Clone or download the repository:
-   ```bash
+```bash
    git clone https://github.com/j-mathes/lmadmin-debug-log-reader.git
    cd lmadmin-debug-log-reader
    ```
 
-2. Ensure Python 3.6+ is installed on your system
-
-## Usage
-
-### Basic Usage
-
-Run the script and select a log file through the GUI:
+### Usage
 
 ```bash
 python lmadmin_feature_usage_summary.py

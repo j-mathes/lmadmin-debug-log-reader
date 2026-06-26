@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>lmadmin Log Viewer</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body class="theme-light">
+
+<!-- Header -->
+<header class="app-header">
+    <div class="header-left">
+        <div class="file-menu-wrap">
+            <button class="file-menu-btn" id="file-menu-btn">File &#9660;</button>
+            <div class="dropdown" id="file-dropdown">
+                <button class="dropdown-item" id="menu-load">Load Log File(s)&hellip;</button>
+                <button class="dropdown-item" id="menu-clear">Clear All Data</button>
+                <div class="dropdown-sep"></div>
+                <button class="dropdown-item" id="menu-export-report">Export Report to File&hellip;</button>
+                <button class="dropdown-item" id="menu-export-chart">Export Chart as PNG</button>
+            </div>
+        </div>
+        <span class="app-title">lmadmin Log Viewer</span>
+    </div>
+    <span class="header-status" id="header-status">No data loaded</span>
+</header>
+
+<!-- Tab bar -->
+<nav class="tab-bar">
+    <button class="tab-btn active" data-tab="dashboard">Dashboard</button>
+    <button class="tab-btn" data-tab="report">Report</button>
+    <button class="tab-btn" data-tab="settings">Settings</button>
+</nav>
+
+<!-- ═══════════════════════════ DASHBOARD TAB ═══════════════════════════ -->
+<div id="tab-dashboard" class="tab-content active">
+
+    <div class="summary-cards">
+        <div class="card">
+            <div class="card-value" id="stat-checkouts">&#8212;</div>
+            <div class="card-label">Checkouts</div>
+        </div>
+        <div class="card">
+            <div class="card-value" id="stat-features">&#8212;</div>
+            <div class="card-label">Unique Features</div>
+        </div>
+        <div class="card">
+            <div class="card-value" id="stat-users">&#8212;</div>
+            <div class="card-label">Unique Users</div>
+        </div>
+        <div class="card">
+            <div class="card-value" id="stat-computers">&#8212;</div>
+            <div class="card-label">Computers</div>
+        </div>
+        <div class="card">
+            <div class="card-value" id="stat-denied">&#8212;</div>
+            <div class="card-label">Denials</div>
+        </div>
+        <div class="card">
+            <div class="card-value" id="stat-range">&#8212;</div>
+            <div class="card-label">Date Range</div>
+        </div>
+    </div>
+
+    <div class="chart-panel">
+        <div class="chart-toolbar">
+            <div class="tb-group">
+                <label>View By</label>
+                <select id="view-by">
+                    <option value="feature">Feature</option>
+                    <option value="user">User</option>
+                    <option value="computer">Computer</option>
+                </select>
+            </div>
+            <div class="tb-group">
+                <label>Action</label>
+                <select id="action-filter">
+                    <option value="OUT">Checkouts (OUT)</option>
+                    <option value="DENIED">Denials (DENIED)</option>
+                    <option value="UNSUPPORTED">Unsupported</option>
+                </select>
+            </div>
+            <div class="tb-group">
+                <label>Chart Type</label>
+                <select id="chart-type">
+                    <option value="line">Line</option>
+                    <option value="bar">Bar</option>
+                    <option value="bar-stacked">Stacked Bar</option>
+                </select>
+            </div>
+            <div class="tb-group">
+                <label>Show Top</label>
+                <select id="top-n">
+                    <option value="5">5</option>
+                    <option value="10" selected>10</option>
+                    <option value="20">20</option>
+                    <option value="0">All</option>
+                </select>
+            </div>
+            <div class="tb-group">
+                <label>From</label>
+                <input type="date" id="date-from">
+            </div>
+            <div class="tb-group">
+                <label>To</label>
+                <input type="date" id="date-to">
+            </div>
+            <button class="btn-primary" id="apply-btn">Apply</button>
+            <button class="btn-ghost" id="reset-btn">Reset</button>
+        </div>
+
+        <div class="chart-wrap" id="chart-wrap">
+            <canvas id="main-chart"></canvas>
+            <div class="empty-state" id="empty-state">
+                <div class="empty-icon">&#128194;</div>
+                <p id="empty-msg">Drop log files here or use <strong>File &#9660; &rarr; Load Log File(s)</strong></p>
+            </div>
+        </div>
+    </div>
+
+    <div class="files-panel">
+        <span class="files-label">Loaded Files <span class="badge" id="file-count">0</span></span>
+        <div id="files-list" class="files-list"></div>
+    </div>
+
+</div>
+
+<!-- ═══════════════════════════ REPORT TAB ═══════════════════════════════ -->
+<div id="tab-report" class="tab-content hidden">
+
+    <div class="report-toolbar">
+        <div class="tb-group">
+            <label>Report Type</label>
+            <select id="report-type">
+                <option value="feature-by-date">Feature Usage by Date</option>
+                <option value="user-summary">User Summary</option>
+                <option value="computer-summary">Computer Summary</option>
+                <option value="feature-totals">Feature Totals (All Time)</option>
+                <option value="denial-report">Denial &amp; Unsupported Report</option>
+                <option value="top-users">Top Users by Checkout</option>
+                <option value="top-features">Top Features by Checkout</option>
+            </select>
+        </div>
+        <button class="btn-primary" id="generate-btn">Generate</button>
+        <button class="btn-secondary" id="export-report-btn">Export to File&hellip;</button>
+        <button class="btn-secondary" id="copy-btn">Copy</button>
+    </div>
+    <pre id="report-out" class="report-out">Select a report type and click Generate.</pre>
+
+</div>
+
+<!-- ═══════════════════════════ SETTINGS TAB ══════════════════════════════ -->
+<div id="tab-settings" class="tab-content hidden">
+    <div class="settings-wrap">
+
+        <section class="settings-section">
+            <h2>Vendor Configuration</h2>
+            <div class="srow">
+                <div class="slabel">
+                    <label for="s-vendor">Vendor Daemon Name</label>
+                    <small>The daemon name in parentheses in your log, e.g. <code>(geoslope)</code>.
+                    Changing this requires reloading log files.</small>
+                </div>
+                <input type="text" id="s-vendor" class="sinput" value="geoslope" spellcheck="false">
+            </div>
+            <div class="srow">
+                <div class="slabel">
+                    <label for="s-prefix">Feature Prefix Filter</label>
+                    <small>Only show features starting with this prefix. Leave empty to show all features.</small>
+                </div>
+                <input type="text" id="s-prefix" class="sinput" value="pkc_" spellcheck="false">
+            </div>
+        </section>
+
+        <section class="settings-section">
+            <h2>Appearance</h2>
+            <div class="srow">
+                <div class="slabel"><label for="s-theme">Theme</label></div>
+                <select id="s-theme" class="sinput">
+                    <option value="light">Light</option>
+                    <option value="dark">Dark</option>
+                </select>
+            </div>
+            <div class="srow">
+                <div class="slabel">
+                    <label>Chart Color Palette</label>
+                    <small>Colors used for chart series in order.</small>
+                </div>
+                <div id="color-palette" class="color-palette"></div>
+            </div>
+        </section>
+
+        <section class="settings-section">
+            <h2>Chart Defaults</h2>
+            <div class="srow">
+                <div class="slabel"><label for="s-chart-type">Default Chart Type</label></div>
+                <select id="s-chart-type" class="sinput">
+                    <option value="line">Line</option>
+                    <option value="bar">Bar</option>
+                    <option value="bar-stacked">Stacked Bar</option>
+                </select>
+            </div>
+            <div class="srow">
+                <div class="slabel"><label for="s-view-by">Default View By</label></div>
+                <select id="s-view-by" class="sinput">
+                    <option value="feature">Feature</option>
+                    <option value="user">User</option>
+                    <option value="computer">Computer</option>
+                </select>
+            </div>
+            <div class="srow">
+                <div class="slabel"><label for="s-top-n">Default Top N</label></div>
+                <select id="s-top-n" class="sinput">
+                    <option value="5">Top 5</option>
+                    <option value="10">Top 10</option>
+                    <option value="20">Top 20</option>
+                    <option value="0">All</option>
+                </select>
+            </div>
+        </section>
+
+        <div class="settings-actions">
+            <button class="btn-primary" id="save-settings-btn">Save Settings</button>
+            <button class="btn-secondary" id="export-settings-btn">Export Settings JSON</button>
+            <label class="btn-secondary label-btn" for="import-settings-file">Import Settings JSON</label>
+            <input type="file" id="import-settings-file" accept=".json" style="display:none">
+            <button class="btn-danger" id="reset-settings-btn">Reset to Defaults</button>
+        </div>
+        <div class="save-status" id="save-status"></div>
+
+    </div>
+</div>
+
+<!-- Hidden log file input -->
+<input type="file" id="file-input" accept=".log,.txt,.debug" multiple style="display:none">
+
+<!-- Toast notification -->
+<div class="toast" id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="js/parser.js"></script>
+<script src="js/reports.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
