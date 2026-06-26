@@ -33,5 +33,9 @@ Thumbs.db
 # Logs & local data
 *.log
 
-# Sample logs folder
+# Sample logs folder (contains real/sensitive logs — not tracked)
 sample_logs/
+
+# Example logs folder IS tracked (contains anonymized demo files)
+!example_logs/
+!example_logs/*.log
