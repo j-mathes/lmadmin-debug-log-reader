@@ -130,7 +130,7 @@ Feel free to submit issues, feature requests, or pull requests to improve this t
 
 ## Author
 
-Created by Jared Mathes using Microsoft 365 Copilot.
+Created by Jared Mathes
 
 ---
 
