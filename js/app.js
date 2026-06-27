@@ -296,6 +296,9 @@ function getChartEvents() {
     const pfx    = State.settings.featurePrefix;
     const viewBy = el('view-by').value;
 
+    const splitByFeature = (viewBy === 'user' || viewBy === 'computer') &&
+        el('split-feature')?.value === 'split';
+
     // Feature sub-filter — only active when viewing by user or computer
     let activeFeatures = null;
     if (viewBy === 'user' || viewBy === 'computer') {
@@ -305,12 +308,24 @@ function getChartEvents() {
         }
     }
 
+    // User/computer sub-filter — only active in split-by-feature mode
+    let activeUC = null;
+    if (splitByFeature) {
+        const cbs = document.querySelectorAll('#uc-filter-checks input[type="checkbox"]');
+        if (cbs.length) {
+            activeUC = new Set(Array.from(cbs).filter(c => c.checked).map(c => c.value));
+        }
+    }
+
     return State.events.filter(e => {
         if (!actions.has(e.action))                              return false;
         if (from && e.date < from)                               return false;
         if (to   && e.date > to)                                 return false;
         if (pfx  && !e.feature.startsWith(pfx))                 return false;
         if (activeFeatures && !activeFeatures.has(e.feature))   return false;
+        if (activeUC) {
+            if (!activeUC.has(viewBy === 'user' ? e.user : e.computer)) return false;
+        }
         return true;
     });
 }
@@ -388,7 +403,8 @@ function renderChart() {
         canvas.style.display = 'none';
         resetCanvas();
         destroyChart();
-        el('chart-legend').innerHTML = '';
+        // Preserve the legend so the user can re-select filters; only clear it
+        // when there is genuinely no data loaded at all.
         return;
     }
 
@@ -402,7 +418,15 @@ function renderChart() {
     const stacked   = chartType === 'bar-stacked';
     const jsType    = stacked ? 'bar' : chartType;
 
-    const { labels, datasets, featureBreakdown } = buildChartData(events, viewBy, topN);
+    // Show/hide Breakdown control; reset it when leaving user/computer view
+    const isUCView = viewBy === 'user' || viewBy === 'computer';
+    const splitGrp = el('tb-split-group');
+    if (splitGrp) splitGrp.style.display = isUCView ? '' : 'none';
+    if (!isUCView) { const sf = el('split-feature'); if (sf) sf.value = 'consolidated'; }
+    const splitByFeature = isUCView && el('split-feature')?.value === 'split';
+    const effectiveViewBy = splitByFeature ? 'feature' : viewBy;
+
+    const { labels, datasets, featureBreakdown } = buildChartData(events, effectiveViewBy, topN);
 
     const jsDsets = datasets.map((ds, i) => {
         const hex = State.settings.colors[i % State.settings.colors.length];
@@ -437,7 +461,7 @@ function renderChart() {
                         label: ctx => {
                             const group = ctx.dataset.label;
                             const total = ctx.raw;
-                            if (viewBy !== 'user' && viewBy !== 'computer') {
+                            if (splitByFeature || viewBy !== 'user' && viewBy !== 'computer') {
                                 return ` ${group}: ${total}`;
                             }
                             const bd = featureBreakdown[ctx.label]?.[group];
@@ -511,10 +535,19 @@ function renderLegend() {
         Array.from(document.querySelectorAll('#feature-filter-checks input')).map(c => c.value)
     );
 
+    // Determine split mode and capture UC filter state before wiping
+    const viewBy = el('view-by').value;
+    const splitByFeature = (viewBy === 'user' || viewBy === 'computer') &&
+        el('split-feature')?.value === 'split';
+    const prevUCChecked = new Set(
+        Array.from(document.querySelectorAll('#uc-filter-checks input:checked')).map(c => c.value)
+    );
+    const prevUCAll = new Set(
+        Array.from(document.querySelectorAll('#uc-filter-checks input')).map(c => c.value)
+    );
+
     panel.innerHTML = '';
     if (!State.chart) return;
-
-    const viewBy = el('view-by').value;
 
     // Helper: build a section header with All / None buttons
     function makeHeader(titleText, onAll, onNone) {
@@ -580,43 +613,76 @@ function renderLegend() {
     seriesList.className = 'legend-list';
     const seriesItems = [];
 
-    State.chart.data.datasets.forEach((ds, i) => {
-        const item = document.createElement('div');
-        item.className = 'legend-item';
-        if (!State.chart.isDatasetVisible(i)) item.classList.add('series-hidden');
-        seriesItems.push(item);
-
-        const swatch = document.createElement('span');
-        swatch.className = 'legend-swatch';
-        swatch.style.background = ds.borderColor;
-
-        const lbl = document.createElement('span');
-        lbl.textContent = ds.label;
-        lbl.title = ds.label;
-
-        item.appendChild(swatch);
-        item.appendChild(lbl);
-        item.addEventListener('click', () => {
-            const nowVisible = State.chart.isDatasetVisible(i);
-            State.chart.setDatasetVisibility(i, !nowVisible);
-            State.chart.update();
-            item.classList.toggle('series-hidden', nowVisible);
+    if (splitByFeature) {
+        // Split mode: Series section becomes a user/computer filter panel
+        seriesList.id = 'uc-filter-checks';
+        const pfxUC = State.settings.featurePrefix;
+        const ucKey = viewBy === 'user' ? 'user' : 'computer';
+        const allUC = [...new Set(
+            State.events
+                .filter(e => !pfxUC || e.feature.startsWith(pfxUC))
+                .map(e => e[ucKey])
+        )].sort();
+        allUC.forEach(ucVal => {
+            const checked = !prevUCAll.has(ucVal) || prevUCChecked.has(ucVal);
+            const lbl = document.createElement('label');
+            lbl.className = 'legend-check';
+            const cb = document.createElement('input');
+            cb.type    = 'checkbox';
+            cb.value   = ucVal;
+            cb.checked = checked;
+            cb.addEventListener('change', renderChart);
+            lbl.appendChild(cb);
+            lbl.appendChild(document.createTextNode(' ' + ucVal));
+            seriesList.appendChild(lbl);
         });
-        seriesList.appendChild(item);
-    });
+        const ucTitle = viewBy === 'user' ? 'Users' : 'Computers';
+        seriesSection.appendChild(makeHeader(ucTitle,
+            () => { seriesList.querySelectorAll('input').forEach(cb => cb.checked = true);  renderChart(); },
+            () => { seriesList.querySelectorAll('input').forEach(cb => cb.checked = false); renderChart(); }
+        ));
+    } else {
+        // Normal mode: click to show/hide each dataset
+        State.chart.data.datasets.forEach((ds, i) => {
+            const item = document.createElement('div');
+            item.className = 'legend-item';
+            if (!State.chart.isDatasetVisible(i)) item.classList.add('series-hidden');
+            seriesItems.push(item);
 
-    seriesSection.appendChild(makeHeader('Series',
-        () => {
-            State.chart.data.datasets.forEach((_, i) => State.chart.setDatasetVisibility(i, true));
-            State.chart.update();
-            seriesItems.forEach(it => it.classList.remove('series-hidden'));
-        },
-        () => {
-            State.chart.data.datasets.forEach((_, i) => State.chart.setDatasetVisibility(i, false));
-            State.chart.update();
-            seriesItems.forEach(it => it.classList.add('series-hidden'));
-        }
-    ));
+            const swatch = document.createElement('span');
+            swatch.className = 'legend-swatch';
+            swatch.style.background = ds.borderColor;
+
+            const lbl = document.createElement('span');
+            lbl.textContent = ds.label;
+            lbl.title = ds.label;
+
+            item.appendChild(swatch);
+            item.appendChild(lbl);
+            item.addEventListener('click', () => {
+                if (!State.chart) return;
+                const nowVisible = State.chart.isDatasetVisible(i);
+                State.chart.setDatasetVisibility(i, !nowVisible);
+                State.chart.update();
+                item.classList.toggle('series-hidden', nowVisible);
+            });
+            seriesList.appendChild(item);
+        });
+        seriesSection.appendChild(makeHeader('Series',
+            () => {
+                if (!State.chart) return;
+                State.chart.data.datasets.forEach((_, i) => State.chart.setDatasetVisibility(i, true));
+                State.chart.update();
+                seriesItems.forEach(it => it.classList.remove('series-hidden'));
+            },
+            () => {
+                if (!State.chart) return;
+                State.chart.data.datasets.forEach((_, i) => State.chart.setDatasetVisibility(i, false));
+                State.chart.update();
+                seriesItems.forEach(it => it.classList.add('series-hidden'));
+            }
+        ));
+    }
     seriesSection.appendChild(seriesList);
     panel.appendChild(seriesSection);
 
@@ -640,6 +706,12 @@ function renderLegend() {
                 .map(e => e.feature)
         )].sort();
 
+        // In split mode the features are the chart series — map name → color for swatches
+        const featColorMap = {};
+        if (splitByFeature && State.chart) {
+            State.chart.data.datasets.forEach(ds => { featColorMap[ds.label] = ds.borderColor; });
+        }
+
         features.forEach(feat => {
             const checked = !prevFeatAll.has(feat) || prevFeatChecked.has(feat);
             const lbl = document.createElement('label');
@@ -650,6 +722,12 @@ function renderLegend() {
             cb.checked = checked;
             cb.addEventListener('change', renderChart);
             lbl.appendChild(cb);
+            if (splitByFeature) {
+                const sw = document.createElement('span');
+                sw.className = 'legend-swatch';
+                sw.style.background = featColorMap[feat] || 'var(--border)';
+                lbl.appendChild(sw);
+            }
             lbl.appendChild(document.createTextNode(' ' + feat));
             featList.appendChild(lbl);
         });
@@ -1123,6 +1201,7 @@ function initListeners() {
 
     // ── Chart toolbar ──────────────────────────────────────────────────────
     el('apply-btn').addEventListener('click', renderChart);
+    el('split-feature').addEventListener('change', renderChart);
     el('reset-btn').addEventListener('click', () => {
         el('act-out').checked         = true;
         el('act-denied').checked      = true;
@@ -1130,6 +1209,9 @@ function initListeners() {
         // Clear feature filter so all features default to checked on next render
         const ffc = el('feature-filter-checks');
         if (ffc) ffc.innerHTML = '';
+        const ucfc = el('uc-filter-checks');
+        if (ucfc) ucfc.innerHTML = '';
+        el('split-feature').value = 'consolidated';
         el('view-by').value       = State.settings.viewBy;
         el('chart-type').value    = State.settings.chartType;
         el('top-n').value         = String(State.settings.topN);
