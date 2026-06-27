@@ -259,10 +259,10 @@ function getChartEvents() {
     const pfx    = State.settings.featurePrefix;
 
     return State.events.filter(e => {
-        if (e.action !== action)                        return false;
-        if (from && e.date < from)                      return false;
-        if (to   && e.date > to)                        return false;
-        if (pfx  && !e.feature.startsWith(pfx))         return false;
+        if (action !== 'all' && e.action !== action) return false;
+        if (from && e.date < from)                   return false;
+        if (to   && e.date > to)                     return false;
+        if (pfx  && !e.feature.startsWith(pfx))      return false;
         return true;
     });
 }
