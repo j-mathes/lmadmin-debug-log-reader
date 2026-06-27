@@ -253,16 +253,20 @@ function setDateRangeFromData() {
 // Chart
 // ═══════════════════════════════════════════════════════════════════════════════
 function getChartEvents() {
-    const action = el('action-filter').value;
-    const from   = el('date-from').value;
-    const to     = el('date-to').value;
-    const pfx    = State.settings.featurePrefix;
+    const actions = new Set();
+    if (el('act-out').checked)         actions.add('OUT');
+    if (el('act-denied').checked)      actions.add('DENIED');
+    if (el('act-unsupported').checked) actions.add('UNSUPPORTED');
+
+    const from = el('date-from').value;
+    const to   = el('date-to').value;
+    const pfx  = State.settings.featurePrefix;
 
     return State.events.filter(e => {
-        if (action !== 'all' && e.action !== action) return false;
-        if (from && e.date < from)                   return false;
-        if (to   && e.date > to)                     return false;
-        if (pfx  && !e.feature.startsWith(pfx))      return false;
+        if (!actions.has(e.action))              return false;
+        if (from && e.date < from)               return false;
+        if (to   && e.date > to)                 return false;
+        if (pfx  && !e.feature.startsWith(pfx))  return false;
         return true;
     });
 }
@@ -595,7 +599,9 @@ function initListeners() {
     // ── Chart toolbar ──────────────────────────────────────────────────────
     el('apply-btn').addEventListener('click', renderChart);
     el('reset-btn').addEventListener('click', () => {
-        el('action-filter').value = 'OUT';
+        el('act-out').checked         = true;
+        el('act-denied').checked      = true;
+        el('act-unsupported').checked = true;
         el('view-by').value       = State.settings.viewBy;
         el('chart-type').value    = State.settings.chartType;
         el('top-n').value         = String(State.settings.topN);

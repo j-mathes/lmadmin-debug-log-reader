@@ -75,12 +75,11 @@
             </div>
             <div class="tb-group">
                 <label>Action</label>
-                <select id="action-filter">
-                    <option value="all">All Actions</option>
-                    <option value="OUT">Checkouts (OUT)</option>
-                    <option value="DENIED">Denials (DENIED)</option>
-                    <option value="UNSUPPORTED">Unsupported</option>
-                </select>
+                <div class="tb-checks">
+                    <label class="tb-check"><input type="checkbox" id="act-out" checked> Checkouts</label>
+                    <label class="tb-check"><input type="checkbox" id="act-denied" checked> Denied</label>
+                    <label class="tb-check"><input type="checkbox" id="act-unsupported" checked> Unsupported</label>
+                </div>
             </div>
             <div class="tb-group">
                 <label>Chart Type</label>

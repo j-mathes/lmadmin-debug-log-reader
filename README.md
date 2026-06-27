@@ -20,6 +20,8 @@ An interactive, browser-based GUI requiring no installation or server.
 - **Load multiple log files** — drag & drop or use File menu; data accumulates across files
 - **Interactive chart** — line, bar, or stacked-bar chart with dates on X-axis and counts on Y-axis
 - **Three view modes** — visualise usage by Feature, User, or Computer
+- **Action filter checkboxes** — independently toggle Checkouts, Denied, and Unsupported events in any combination
+- **Horizontal scroll** — when enabled the chart expands to show every date label; configurable minimum pixels per label
 - **Summary cards** — instant totals for checkouts, unique features, users, computers, and denials
 - **Date range filter** — zoom into any time period without reloading
 - **Seven report types** (Report tab):
@@ -39,6 +41,7 @@ An interactive, browser-based GUI requiring no installation or server.
   - Light / dark theme
   - Customisable chart colour palette (10 series colours)
   - Default chart type and Top N
+  - Horizontal scroll on/off and minimum pixels per date label
   - Settings persisted to `localStorage`; importable/exportable as JSON
 
 ### Quick Start
