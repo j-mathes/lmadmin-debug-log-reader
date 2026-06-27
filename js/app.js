@@ -276,19 +276,30 @@ function setDateRangeFromData() {
 // ═══════════════════════════════════════════════════════════════════════════════
 function getChartEvents() {
     const actions = new Set();
-    if (el('act-out').checked)         actions.add('OUT');
-    if (el('act-denied').checked)      actions.add('DENIED');
-    if (el('act-unsupported').checked) actions.add('UNSUPPORTED');
+    if (el('act-out')?.checked !== false)         actions.add('OUT');
+    if (el('act-denied')?.checked !== false)      actions.add('DENIED');
+    if (el('act-unsupported')?.checked !== false) actions.add('UNSUPPORTED');
 
-    const from = el('date-from').value;
-    const to   = el('date-to').value;
-    const pfx  = State.settings.featurePrefix;
+    const from   = el('date-from').value;
+    const to     = el('date-to').value;
+    const pfx    = State.settings.featurePrefix;
+    const viewBy = el('view-by').value;
+
+    // Feature sub-filter — only active when viewing by user or computer
+    let activeFeatures = null;
+    if (viewBy === 'user' || viewBy === 'computer') {
+        const cbs = document.querySelectorAll('#feature-filter-checks input[type="checkbox"]');
+        if (cbs.length) {
+            activeFeatures = new Set(Array.from(cbs).filter(c => c.checked).map(c => c.value));
+        }
+    }
 
     return State.events.filter(e => {
-        if (!actions.has(e.action))              return false;
-        if (from && e.date < from)               return false;
-        if (to   && e.date > to)                 return false;
-        if (pfx  && !e.feature.startsWith(pfx))  return false;
+        if (!actions.has(e.action))                              return false;
+        if (from && e.date < from)                               return false;
+        if (to   && e.date > to)                                 return false;
+        if (pfx  && !e.feature.startsWith(pfx))                 return false;
+        if (activeFeatures && !activeFeatures.has(e.feature))   return false;
         return true;
     });
 }
@@ -315,12 +326,25 @@ function buildChartData(events, viewBy, topN) {
         matrix[e[viewBy]][e.date] = (matrix[e[viewBy]][e.date] || 0) + 1;
     }
 
+    // Feature breakdown per date+group for tooltip (user/computer views only)
+    const featureBreakdown = {};
+    if (viewBy === 'user' || viewBy === 'computer') {
+        const groupSet = new Set(groups);
+        for (const e of events) {
+            if (!groupSet.has(e[viewBy])) continue;
+            if (!featureBreakdown[e.date])          featureBreakdown[e.date] = {};
+            if (!featureBreakdown[e.date][e[viewBy]]) featureBreakdown[e.date][e[viewBy]] = {};
+            const bd = featureBreakdown[e.date][e[viewBy]];
+            bd[e.feature] = (bd[e.feature] || 0) + 1;
+        }
+    }
+
     const datasets = groups.map(g => ({
         label: g,
         data : allDates.map(d => matrix[g][d] || 0)
     }));
 
-    return { labels: allDates, datasets };
+    return { labels: allDates, datasets, featureBreakdown };
 }
 
 function renderChart() {
@@ -367,7 +391,7 @@ function renderChart() {
     const stacked   = chartType === 'bar-stacked';
     const jsType    = stacked ? 'bar' : chartType;
 
-    const { labels, datasets } = buildChartData(events, viewBy, topN);
+    const { labels, datasets, featureBreakdown } = buildChartData(events, viewBy, topN);
 
     const jsDsets = datasets.map((ds, i) => {
         const hex = State.settings.colors[i % State.settings.colors.length];
@@ -398,7 +422,21 @@ function renderChart() {
                 legend: { display: false },
                 tooltip: {
                     callbacks: {
-                        title: ctx => `Date: ${ctx[0].label}`
+                        title: ctx => `Date: ${ctx[0].label}`,
+                        label: ctx => {
+                            const group = ctx.dataset.label;
+                            const total = ctx.raw;
+                            if (viewBy !== 'user' && viewBy !== 'computer') {
+                                return ` ${group}: ${total}`;
+                            }
+                            const bd = featureBreakdown[ctx.label]?.[group];
+                            if (!bd) return ` ${group}: ${total}`;
+                            const lines = [` ${group}: ${total}`];
+                            Object.entries(bd)
+                                .sort((a, b) => b[1] - a[1])
+                                .forEach(([feat, cnt]) => lines.push(`   \u2514 ${feat}: ${cnt}`));
+                            return lines;
+                        }
                     }
                 }
             },
@@ -445,13 +483,97 @@ function renderChart() {
 }
 
 function renderLegend() {
-    const container = el('chart-legend');
-    container.innerHTML = '';
+    const panel = el('chart-legend');
+
+    // Capture action state before wiping the panel
+    const actState = {
+        out:         el('act-out')?.checked ?? true,
+        denied:      el('act-denied')?.checked ?? true,
+        unsupported: el('act-unsupported')?.checked ?? true,
+    };
+
+    // Capture feature filter state before wiping the panel
+    const prevFeatChecked = new Set(
+        Array.from(document.querySelectorAll('#feature-filter-checks input:checked')).map(c => c.value)
+    );
+    const prevFeatAll = new Set(
+        Array.from(document.querySelectorAll('#feature-filter-checks input')).map(c => c.value)
+    );
+
+    panel.innerHTML = '';
     if (!State.chart) return;
+
+    const viewBy = el('view-by').value;
+
+    // Helper: build a section header with All / None buttons
+    function makeHeader(titleText, onAll, onNone) {
+        const hdr = document.createElement('div');
+        hdr.className = 'legend-section-header';
+        const title = document.createElement('span');
+        title.className = 'legend-section-title';
+        title.textContent = titleText;
+        const btns = document.createElement('div');
+        btns.className = 'legend-all-btns';
+        ['All', 'None'].forEach((label, idx) => {
+            const btn = document.createElement('button');
+            btn.className = 'legend-all-btn';
+            btn.textContent = label;
+            btn.addEventListener('click', idx === 0 ? onAll : onNone);
+            btns.appendChild(btn);
+        });
+        hdr.appendChild(title);
+        hdr.appendChild(btns);
+        return hdr;
+    }
+
+    // ── Action section ────────────────────────────────────────────────
+    const actionSection = document.createElement('div');
+    actionSection.className = 'legend-section legend-action-section';
+
+    const actionList = document.createElement('div');
+    actionList.className = 'legend-list';
+
+    [
+        { id: 'act-out',         label: 'Checkouts',   key: 'out'         },
+        { id: 'act-denied',      label: 'Denied',      key: 'denied'      },
+        { id: 'act-unsupported', label: 'Unsupported', key: 'unsupported' },
+    ].forEach(({ id, label, key }) => {
+        const lbl = document.createElement('label');
+        lbl.className = 'legend-check';
+        const cb = document.createElement('input');
+        cb.type    = 'checkbox';
+        cb.id      = id;
+        cb.checked = actState[key];
+        cb.addEventListener('change', renderChart);
+        lbl.appendChild(cb);
+        lbl.appendChild(document.createTextNode(' ' + label));
+        actionList.appendChild(lbl);
+    });
+
+    actionSection.appendChild(makeHeader('Action',
+        () => { actionList.querySelectorAll('input').forEach(cb => cb.checked = true);  renderChart(); },
+        () => { actionList.querySelectorAll('input').forEach(cb => cb.checked = false); renderChart(); }
+    ));
+    actionSection.appendChild(actionList);
+
+    const actionDivider = document.createElement('div');
+    actionDivider.className = 'legend-section-divider';
+    panel.appendChild(actionSection);
+    panel.appendChild(actionDivider);
+
+    // ── Series section (scrollable) ────────────────────────────────────
+    const seriesSection = document.createElement('div');
+    seriesSection.className = 'legend-section legend-series-section';
+
+    const seriesList = document.createElement('div');
+    seriesList.className = 'legend-list';
+    const seriesItems = [];
+
     State.chart.data.datasets.forEach((ds, i) => {
         const item = document.createElement('div');
         item.className = 'legend-item';
         if (!State.chart.isDatasetVisible(i)) item.classList.add('series-hidden');
+        seriesItems.push(item);
 
         const swatch = document.createElement('span');
         swatch.className = 'legend-swatch';
@@ -469,8 +591,66 @@ function renderLegend() {
             State.chart.update();
             item.classList.toggle('series-hidden', nowVisible);
         });
-        container.appendChild(item);
+        seriesList.appendChild(item);
     });
+
+    seriesSection.appendChild(makeHeader('Series',
+        () => {
+            State.chart.data.datasets.forEach((_, i) => State.chart.setDatasetVisibility(i, true));
+            State.chart.update();
+            seriesItems.forEach(it => it.classList.remove('series-hidden'));
+        },
+        () => {
+            State.chart.data.datasets.forEach((_, i) => State.chart.setDatasetVisibility(i, false));
+            State.chart.update();
+            seriesItems.forEach(it => it.classList.add('series-hidden'));
+        }
+    ));
+    seriesSection.appendChild(seriesList);
+    panel.appendChild(seriesSection);
+
+    // ── Feature section (bottom, expands upward, user/computer views only) ─
+    if (viewBy === 'user' || viewBy === 'computer') {
+        const featSection = document.createElement('div');
+        featSection.className = 'legend-section legend-feature-section';
+
+        const divider = document.createElement('div');
+        divider.className = 'legend-section-divider';
+
+        const featList = document.createElement('div');
+        featList.id = 'feature-filter-checks';
+        featList.className = 'legend-list';
+
+        // Populate features, preserving previous checked state
+        const pfx = State.settings.featurePrefix;
+        const features = [...new Set(
+            State.events
+                .filter(e => !pfx || e.feature.startsWith(pfx))
+                .map(e => e.feature)
+        )].sort();
+
+        features.forEach(feat => {
+            const checked = !prevFeatAll.has(feat) || prevFeatChecked.has(feat);
+            const lbl = document.createElement('label');
+            lbl.className = 'legend-check';
+            const cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.value = feat;
+            cb.checked = checked;
+            cb.addEventListener('change', renderChart);
+            lbl.appendChild(cb);
+            lbl.appendChild(document.createTextNode(' ' + feat));
+            featList.appendChild(lbl);
+        });
+
+        featSection.appendChild(divider);
+        featSection.appendChild(makeHeader('Features',
+            () => { featList.querySelectorAll('input').forEach(cb => cb.checked = true); renderChart(); },
+            () => { featList.querySelectorAll('input').forEach(cb => cb.checked = false); renderChart(); }
+        ));
+        featSection.appendChild(featList);
+        panel.appendChild(featSection);
+    }
 }
 
 function destroyChart() {
@@ -653,6 +833,9 @@ function initListeners() {
         el('act-out').checked         = true;
         el('act-denied').checked      = true;
         el('act-unsupported').checked = true;
+        // Clear feature filter so all features default to checked on next render
+        const ffc = el('feature-filter-checks');
+        if (ffc) ffc.innerHTML = '';
         el('view-by').value       = State.settings.viewBy;
         el('chart-type').value    = State.settings.chartType;
         el('top-n').value         = String(State.settings.topN);

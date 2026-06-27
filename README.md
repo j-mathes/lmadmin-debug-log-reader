@@ -1,4 +1,4 @@
-# lmadmin Feature Usage Summary
+# lmadmin Debug Log Reader
 
 Tools for parsing and analyzing lmadmin debug log files.  Two independent tools are provided:
 
@@ -18,12 +18,15 @@ An interactive, browser-based GUI requiring no installation or server.
 ### Features
 
 - **Load multiple log files** — drag & drop or use File menu; data accumulates across files
-- **Interactive chart** — line, bar, or stacked-bar chart with dates on X-axis and counts on Y-axis; scrollable sidebar legend with click-to-toggle series
+- **Interactive chart** — line, bar, or stacked-bar chart with dates on X-axis and counts on Y-axis
 - **Three view modes** — visualise usage by Feature, User, or Computer
-- **Action filter checkboxes** — independently toggle Checkouts, Denied, and Unsupported events in any combination
 - **Horizontal scroll** — when enabled the chart expands to show every date label; configurable minimum pixels per label
 - **Summary cards** — instant totals for checkouts, unique features, users, computers, and denials
 - **Date range filter** — zoom into any time period without reloading
+- **Left panel — three real-time filter sections** (all changes apply instantly, no Apply button needed):
+  - **Action** — independently toggle Checkouts, Denied, and Unsupported events; All / None buttons
+  - **Series** — click any series to show/hide it on the chart; All / None buttons
+  - **Features** — per-feature sub-filter (visible in User and Computer views); All / None buttons; expands dynamically from the bottom
 - **Seven report types** (Report tab):
   - Feature Usage by Date *(matches original Python output)*
   - User Summary
@@ -49,9 +52,10 @@ An interactive, browser-based GUI requiring no installation or server.
 1. Open `index.html` in a modern browser (Chrome, Edge, Firefox)
 2. Go to **File → Load Log File(s)** or drag `.log` files onto the window
 3. The chart and summary cards populate immediately
-4. Use the toolbar selectors to change the view; click **Apply**
-5. Switch to the **Report** tab to generate and export text reports
-6. Switch to **Settings** to configure the vendor daemon or appearance
+4. Use the left panel to filter by Action, toggle series, or narrow by Feature — all changes are real-time
+5. Use the toolbar dropdowns (View By, Chart Type, Top N, date range) and click **Apply** to redraw
+6. Switch to the **Report** tab to generate and export text reports
+7. Switch to **Settings** to configure the vendor daemon or appearance
 
 ### File Layout
 
