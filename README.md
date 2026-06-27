@@ -1,5 +1,7 @@
 # lmadmin Debug Log Reader
 
+**Live demo:** [https://j-mathes.github.io/lmadmin-debug-log-reader/](https://j-mathes.github.io/lmadmin-debug-log-reader/)
+
 Tools for parsing and analyzing lmadmin debug log files.  Two independent tools are provided:
 
 - **Web Viewer** (`index.html`) — interactive GUI with charts, filtering, and multiple report types
