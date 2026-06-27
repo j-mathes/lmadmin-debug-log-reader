@@ -37,7 +37,7 @@ An interactive, browser-based GUI requiring no installation or server.
   - Top Features by Checkout
   - **All Reports (Combined View)** — displays every report in one scrollable output
 - **Export format** — choose **Plain Text (.txt)** or **Markdown (.md)** before generating or exporting
-- **Export** — save any report to a file; "All Reports" triggers a separate download per type; export the chart as PNG
+- **Export** — save any report to a file; "All Reports" triggers a separate download per type; export the chart via **File → Export Chart…** in PNG, JPEG, or SVG — SVG is true vector (scalable, editable in Inkscape/Illustrator); all formats include the full chart width (including any horizontally scrolled-off area) and the legend panel
 - **Settings** (Settings tab):
   - Vendor daemon name (default: `geoslope`)
   - Feature prefix filter (default: `pkc_`)

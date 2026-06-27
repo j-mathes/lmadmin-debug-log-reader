@@ -727,12 +727,289 @@ function downloadBlob(blob, filename) {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-function exportChartPNG() {
+function openExportChartModal() {
     if (!State.chart) { toast('No chart to export.'); return; }
+    el('export-chart-modal').style.display = 'flex';
+}
+
+function closeExportChartModal() {
+    el('export-chart-modal').style.display = 'none';
+}
+
+function exportChart(format) {
+    closeExportChartModal();
+    if (!State.chart) return;
+
+    const date = new Date().toISOString().slice(0, 10);
     const a = document.createElement('a');
-    a.href     = State.chart.toBase64Image('image/png', 1.0);
-    a.download = `lmadmin-chart-${new Date().toISOString().slice(0,10)}.png`;
+
+    if (format === 'svg') {
+        const svgStr = buildVectorSVG();
+        const blob = new Blob([svgStr], { type: 'image/svg+xml' });
+        a.href     = URL.createObjectURL(blob);
+        a.download = `lmadmin-chart-${date}.svg`;
+    } else {
+        // PNG / JPEG — composite canvas with manually drawn legend
+        const chartCanvas = State.chart.canvas;
+        const bs = getComputedStyle(document.body);
+        const bgCard    = bs.getPropertyValue('--bg-card').trim();
+        const textColor = bs.getPropertyValue('--text').trim();
+        const mutedClr  = bs.getPropertyValue('--text-muted').trim();
+        const borderClr = bs.getPropertyValue('--border').trim();
+
+        const LEGEND_W = 180, PAD = 10, LINE_H = 22, HDR_H = 24, DIV_H = 9;
+        const FONT     = '12px -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif';
+        const HDR_FONT = 'bold 10px -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif';
+
+        const featCbs = [...document.querySelectorAll('#feature-filter-checks input')];
+        const hasFeat = featCbs.length > 0;
+        const legendH = 4 + HDR_H + 3*LINE_H + DIV_H
+            + HDR_H + State.chart.data.datasets.length * LINE_H
+            + (hasFeat ? DIV_H + HDR_H + featCbs.length * LINE_H : 0) + 8;
+
+        const totalW = LEGEND_W + 1 + chartCanvas.width;
+        const totalH = Math.max(chartCanvas.height, legendH);
+        const off = document.createElement('canvas');
+        off.width = totalW; off.height = totalH;
+        const ctx = off.getContext('2d');
+
+        ctx.fillStyle = format === 'jpeg' ? '#ffffff' : bgCard;
+        ctx.fillRect(0, 0, totalW, totalH);
+        ctx.drawImage(chartCanvas, LEGEND_W + 1, 0);
+        ctx.fillStyle = borderClr; ctx.fillRect(LEGEND_W, 0, 1, totalH);
+
+        let y = 4;
+        function secTitle(label) {
+            ctx.font = HDR_FONT; ctx.fillStyle = mutedClr;
+            ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+            ctx.fillText(label, PAD, y + HDR_H / 2); y += HDR_H;
+        }
+        function divLine() {
+            ctx.fillStyle = borderClr; ctx.fillRect(0, y + 2, LEGEND_W, 1); y += DIV_H;
+        }
+        function checkRow(label, checked) {
+            const bx = PAD, by = y + (LINE_H - 11) / 2;
+            ctx.lineWidth = 1; ctx.strokeStyle = checked ? textColor : mutedClr;
+            ctx.strokeRect(bx+0.5, by+0.5, 10, 10);
+            if (checked) { ctx.fillStyle = textColor; ctx.fillRect(bx+2.5, by+2.5, 6, 6); }
+            ctx.font = FONT; ctx.fillStyle = checked ? textColor : mutedClr;
+            ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+            ctx.save(); ctx.beginPath();
+            ctx.rect(PAD+15, y, LEGEND_W-PAD-19, LINE_H); ctx.clip();
+            ctx.fillText(label, PAD+15, y+LINE_H/2); ctx.restore(); y += LINE_H;
+        }
+
+        secTitle('Action');
+        checkRow('Checkouts',   el('act-out')?.checked         ?? true);
+        checkRow('Denied',      el('act-denied')?.checked      ?? true);
+        checkRow('Unsupported', el('act-unsupported')?.checked ?? true);
+        divLine();
+        secTitle('Series');
+        State.chart.data.datasets.forEach((ds, i) => {
+            const visible = State.chart.isDatasetVisible(i);
+            ctx.globalAlpha = visible ? 1 : 0.35;
+            const sw = 12, sh = 12, sr = 2, sx = PAD, sy = y + (LINE_H-sh)/2;
+            ctx.fillStyle = ds.borderColor;
+            ctx.beginPath();
+            ctx.moveTo(sx+sr,sy); ctx.lineTo(sx+sw-sr,sy);
+            ctx.arcTo(sx+sw,sy,sx+sw,sy+sr,sr); ctx.lineTo(sx+sw,sy+sh-sr);
+            ctx.arcTo(sx+sw,sy+sh,sx+sw-sr,sy+sh,sr); ctx.lineTo(sx+sr,sy+sh);
+            ctx.arcTo(sx,sy+sh,sx,sy+sh-sr,sr); ctx.lineTo(sx,sy+sr);
+            ctx.arcTo(sx,sy,sx+sr,sy,sr); ctx.closePath(); ctx.fill();
+            ctx.font = FONT; ctx.fillStyle = textColor;
+            ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+            ctx.save(); ctx.beginPath();
+            ctx.rect(PAD+17, y, LEGEND_W-PAD-21, LINE_H); ctx.clip();
+            ctx.fillText(ds.label, PAD+17, y+LINE_H/2); ctx.restore();
+            ctx.globalAlpha = 1; y += LINE_H;
+        });
+        if (hasFeat) {
+            divLine(); secTitle('Features');
+            featCbs.forEach(cb => checkRow(cb.value, cb.checked));
+        }
+
+        if (format === 'jpeg') {
+            a.href = off.toDataURL('image/jpeg', 0.95);
+            a.download = `lmadmin-chart-${date}.jpg`;
+        } else {
+            a.href = off.toDataURL('image/png');
+            a.download = `lmadmin-chart-${date}.png`;
+        }
+    }
+
     a.click();
+    if (a.href.startsWith('blob:')) URL.revokeObjectURL(a.href);
+}
+
+// Build a true vector SVG from Chart.js rendered geometry + legend state
+function buildVectorSVG() {
+    const chart = State.chart;
+    const CW = chart.canvas.width, CH = chart.canvas.height;
+    const ca = chart.chartArea;
+    const bs = getComputedStyle(document.body);
+    const bgCard    = bs.getPropertyValue('--bg-card').trim();
+    const textClr   = bs.getPropertyValue('--text').trim();
+    const mutedClr  = bs.getPropertyValue('--text-muted').trim();
+    const borderClr = bs.getPropertyValue('--border').trim();
+    const gridClr   = State.settings.theme === 'dark'
+        ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.07)';
+
+    const LEGEND_W = 180, PAD = 10, LINE_H = 22, HDR_H = 24, DIV_H = 9;
+    const SANS = 'ui-sans-serif,system-ui,-apple-system,sans-serif';
+    const f  = v => Number(v).toFixed(1);       // coordinate helper
+    const te = s => escHtml(String(s ?? ''));    // text/attribute escape
+
+    const featCbs = [...document.querySelectorAll('#feature-filter-checks input')];
+    const hasFeat = featCbs.length > 0;
+    const legendH = 4 + HDR_H + 3*LINE_H + DIV_H
+        + HDR_H + chart.data.datasets.length * LINE_H
+        + (hasFeat ? DIV_H + HDR_H + featCbs.length * LINE_H : 0) + 8;
+
+    const totalW = LEGEND_W + 1 + CW;
+    const totalH = Math.max(CH, legendH);
+
+    const p = [];
+    p.push(`<svg xmlns="http://www.w3.org/2000/svg" width="${totalW}" height="${totalH}" viewBox="0 0 ${totalW} ${totalH}">`);
+    p.push(`<defs>`);
+    p.push(`  <clipPath id="ca"><rect x="${f(ca.left)}" y="${f(ca.top)}" width="${f(ca.right-ca.left)}" height="${f(ca.bottom-ca.top)}"/></clipPath>`);
+    p.push(`  <clipPath id="lg"><rect x="0" y="0" width="${LEGEND_W}" height="${totalH}"/></clipPath>`);
+    p.push(`</defs>`);
+    p.push(`<rect width="${totalW}" height="${totalH}" fill="${te(bgCard)}"/>`);
+    p.push(`<line x1="${LEGEND_W}" y1="0" x2="${LEGEND_W}" y2="${totalH}" stroke="${te(borderClr)}" stroke-width="1"/>`);
+
+    // ── Legend ──────────────────────────────────────────────────────────────
+    let ly = 4;
+    p.push(`<g clip-path="url(#lg)">`);
+
+    function lgTitle(label) {
+        p.push(`<text x="${PAD}" y="${f(ly+HDR_H/2)}" font-size="10" font-weight="700" font-family="${SANS}" fill="${te(mutedClr)}" dominant-baseline="middle" letter-spacing="0.06em">${te(label.toUpperCase())}</text>`);
+        ly += HDR_H;
+    }
+    function lgDiv() {
+        p.push(`<line x1="0" y1="${f(ly+2)}" x2="${LEGEND_W}" y2="${f(ly+2)}" stroke="${te(borderClr)}" stroke-width="1"/>`);
+        ly += DIV_H;
+    }
+    function lgCheck(label, checked) {
+        const bx = PAD, by = ly + (LINE_H-11)/2;
+        p.push(`<rect x="${f(bx+0.5)}" y="${f(by+0.5)}" width="10" height="10" fill="none" stroke="${te(checked ? textClr : mutedClr)}" stroke-width="1"/>`);
+        if (checked) p.push(`<rect x="${f(bx+2.5)}" y="${f(by+2.5)}" width="6" height="6" fill="${te(textClr)}"/>`);
+        p.push(`<text x="${bx+15}" y="${f(ly+LINE_H/2)}" font-size="12" font-family="${SANS}" fill="${te(checked ? textClr : mutedClr)}" dominant-baseline="middle">${te(label)}</text>`);
+        ly += LINE_H;
+    }
+
+    lgTitle('Action');
+    lgCheck('Checkouts',   el('act-out')?.checked         ?? true);
+    lgCheck('Denied',      el('act-denied')?.checked      ?? true);
+    lgCheck('Unsupported', el('act-unsupported')?.checked ?? true);
+    lgDiv();
+
+    lgTitle('Series');
+    chart.data.datasets.forEach((ds, i) => {
+        const vis = chart.isDatasetVisible(i), op = vis ? '1' : '0.35';
+        p.push(`<rect x="${PAD}" y="${f(ly+(LINE_H-12)/2)}" width="12" height="12" rx="2" fill="${te(ds.borderColor)}" opacity="${op}"/>`);
+        p.push(`<text x="${PAD+17}" y="${f(ly+LINE_H/2)}" font-size="12" font-family="${SANS}" fill="${te(textClr)}" dominant-baseline="middle" opacity="${op}">${te(ds.label)}</text>`);
+        ly += LINE_H;
+    });
+
+    if (hasFeat) { lgDiv(); lgTitle('Features'); featCbs.forEach(cb => lgCheck(cb.value, cb.checked)); }
+    p.push(`</g>`);
+
+    // ── Chart (translated right of legend) ──────────────────────────────────
+    p.push(`<g transform="translate(${LEGEND_W+1},0)">`);
+
+    const xScale = chart.scales.x;
+    const yScale = chart.scales.y;
+
+    // Y grid lines and tick labels
+    yScale.ticks.forEach((tick, idx) => {
+        const py = yScale.getPixelForTick(idx);
+        if (py < ca.top-1 || py > ca.bottom+1) return;
+        p.push(`<line x1="${f(ca.left)}" y1="${f(py)}" x2="${f(ca.right)}" y2="${f(py)}" stroke="${gridClr}" stroke-width="1"/>`);
+        const lbl = Array.isArray(tick.label) ? tick.label[0] : (tick.label ?? String(tick.value ?? ''));
+        p.push(`<text x="${f(ca.left-6)}" y="${f(py)}" font-size="11" font-family="${SANS}" fill="${te(mutedClr)}" dominant-baseline="middle" text-anchor="end">${te(lbl)}</text>`);
+    });
+
+    // Y axis title
+    const ytx = f(ca.left-44), yty = f((ca.top+ca.bottom)/2);
+    p.push(`<text x="${ytx}" y="${yty}" font-size="11" font-family="${SANS}" fill="${te(mutedClr)}" dominant-baseline="middle" text-anchor="middle" transform="rotate(-90,${ytx},${yty})">Count</text>`);
+
+    // X tick labels (rotated −45°)
+    xScale.ticks.forEach((tick, idx) => {
+        const px = xScale.getPixelForTick(idx);
+        if (px < ca.left-1 || px > ca.right+1) return;
+        const lbl = Array.isArray(tick.label)
+            ? tick.label[0]
+            : (tick.label ?? String(chart.data.labels[tick.value] ?? ''));
+        const ty = ca.bottom + 6;
+        p.push(`<text x="${f(px)}" y="${f(ty)}" font-size="11" font-family="${SANS}" fill="${te(mutedClr)}" text-anchor="end" transform="rotate(-45,${f(px)},${f(ty)})">${te(lbl)}</text>`);
+    });
+
+    // Axis border lines
+    p.push(`<line x1="${f(ca.left)}" y1="${f(ca.bottom)}" x2="${f(ca.right)}" y2="${f(ca.bottom)}" stroke="${te(borderClr)}" stroke-width="1"/>`);
+    p.push(`<line x1="${f(ca.left)}" y1="${f(ca.top)}" x2="${f(ca.left)}" y2="${f(ca.bottom)}" stroke="${te(borderClr)}" stroke-width="1"/>`);
+
+    // Dataset geometry — clipped to chart area
+    p.push(`<g clip-path="url(#ca)">`);
+    const jsType = chart.config.type;
+
+    chart.data.datasets.forEach((ds, i) => {
+        if (!chart.isDatasetVisible(i)) return;
+        const meta = chart.getDatasetMeta(i);
+
+        if (jsType === 'bar') {
+            // Chart.js already computed stacked positions; getProps reflects that
+            meta.data.forEach(bar => {
+                if (!bar || bar.hidden) return;
+                const pr = bar.getProps(['x','y','base','width'], true);
+                if (!pr) return;
+                p.push(`<rect x="${f(pr.x-pr.width/2)}" y="${f(Math.min(pr.y,pr.base))}" width="${f(Math.max(0,pr.width))}" height="${f(Math.abs(pr.base-pr.y))}" fill="${te(ds.backgroundColor)}" stroke="${te(ds.borderColor)}" stroke-width="${ds.borderWidth||1}"/>`);
+            });
+        } else {
+            // Line — cubic-bezier path using Chart.js control points for tension
+            const pts = meta.data.filter(pt => !pt.skip && !pt.hidden);
+            if (pts.length < 2) return;
+
+            let d = '';
+            pts.forEach((pt, j) => {
+                const pr = pt.getProps(['x','y','cp1x','cp1y','cp2x','cp2y'], true);
+                if (!pr) return;
+                if (j === 0) {
+                    d += `M ${f(pr.x)},${f(pr.y)}`;
+                } else {
+                    const pv = pts[j-1].getProps(['x','y','cp2x','cp2y'], true);
+                    if (pv?.cp2x != null && pr.cp1x != null) {
+                        // Cubic bezier matching Chart.js tension curve exactly
+                        d += ` C ${f(pv.cp2x)},${f(pv.cp2y)} ${f(pr.cp1x)},${f(pr.cp1y)} ${f(pr.x)},${f(pr.y)}`;
+                    } else {
+                        d += ` L ${f(pr.x)},${f(pr.y)}`;
+                    }
+                }
+            });
+
+            // Fill area (skipped when fill:false, which is our line-chart default)
+            if (ds.fill !== false) {
+                const base = f(yScale.getPixelForValue(0));
+                const fp = pts[0].getProps(['x'], true);
+                const lp = pts[pts.length-1].getProps(['x'], true);
+                p.push(`<path d="${d} L ${f(lp.x)},${base} L ${f(fp.x)},${base} Z" fill="${te(ds.backgroundColor)}" stroke="none"/>`);
+            }
+            p.push(`<path d="${d}" fill="none" stroke="${te(ds.borderColor)}" stroke-width="${ds.borderWidth||2}" stroke-linejoin="round" stroke-linecap="round"/>`);
+
+            // Data point circles
+            if (ds.pointRadius !== 0) {
+                pts.forEach(pt => {
+                    const pr = pt.getProps(['x','y'], true);
+                    if (!pr) return;
+                    p.push(`<circle cx="${f(pr.x)}" cy="${f(pr.y)}" r="${ds.pointRadius||3}" fill="${te(ds.borderColor)}" stroke="${te(bgCard)}" stroke-width="1.5"/>`);
+                });
+            }
+        }
+    });
+
+    p.push(`</g>`); // dataset clip
+    p.push(`</g>`); // chart translate
+    p.push(`</svg>`);
+    return p.join('\n');
 }
 
 function toast(msg) {
@@ -811,7 +1088,10 @@ function initListeners() {
         if (confirm('Clear all loaded log data?')) clearAll();
     });
     el('menu-export-report').addEventListener('click', exportReport);
-    el('menu-export-chart').addEventListener('click', exportChartPNG);
+    el('menu-export-chart').addEventListener('click', openExportChartModal);
+    el('export-chart-cancel').addEventListener('click', closeExportChartModal);
+    el('export-chart-modal').addEventListener('click', e => { if (e.target === el('export-chart-modal')) closeExportChartModal(); });
+    ['png', 'jpeg', 'svg'].forEach(fmt => el(`export-fmt-${fmt}`).addEventListener('click', () => exportChart(fmt)));
 
     // ── Log file input ─────────────────────────────────────────────────────
     el('file-input').addEventListener('change', e => {

@@ -18,7 +18,7 @@
                 <button class="dropdown-item" id="menu-clear">Clear All Data</button>
                 <div class="dropdown-sep"></div>
                 <button class="dropdown-item" id="menu-export-report">Export Report to File&hellip;</button>
-                <button class="dropdown-item" id="menu-export-chart">Export Chart as PNG</button>
+                <button class="dropdown-item" id="menu-export-chart">Export Chart&hellip;</button>
             </div>
         </div>
         <span class="app-title">lmadmin Log Viewer</span>
@@ -260,6 +260,20 @@
 
 <!-- Hidden log file input -->
 <input type="file" id="file-input" accept=".log,.txt,.debug" multiple style="display:none">
+
+<!-- Export chart modal -->
+<div id="export-chart-modal" class="modal-overlay" style="display:none">
+    <div class="modal-box">
+        <div class="modal-title">Export Chart</div>
+        <p class="modal-desc">Export with legend. SVG is true vector&nbsp;&mdash; scalable and editable. PNG and JPEG are raster.</p>
+        <div class="modal-fmt-btns">
+            <button class="modal-fmt-btn" id="export-fmt-png">PNG</button>
+            <button class="modal-fmt-btn" id="export-fmt-jpeg">JPEG</button>
+            <button class="modal-fmt-btn" id="export-fmt-svg">SVG</button>
+        </div>
+        <button class="modal-cancel-btn" id="export-chart-cancel">Cancel</button>
+    </div>
+</div>
 
 <!-- Toast notification -->
 <div class="toast" id="toast"></div>
