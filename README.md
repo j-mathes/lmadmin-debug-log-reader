@@ -22,14 +22,14 @@ An interactive, browser-based GUI requiring no installation or server.
 - **Three view modes** — visualise usage by Feature, User, or Computer
 - **Breakdown mode** — when viewing by User or Computer, a **Breakdown** toolbar select appears:
   - **Consolidated** (default) — one series per user/computer, with the Features panel acting as a count filter
-  - **By Feature** — series become individual features; the legend Series section becomes a Users/Computers filter so you can see exactly which features each user or computer checked out
+  - **By Feature** — series become individual features; the legend Series section becomes a Users/Computers filter so you can see exactly which features each user or computer checked out; each feature in the Features panel shows a colour swatch matching its chart series (grey swatch for features outside the current top-N)
 - **Horizontal scroll** — when enabled the chart expands to show every date label; configurable minimum pixels per label
 - **Summary cards** — instant totals for checkouts, unique features, users, computers, and denials
 - **Date range filter** — zoom into any time period without reloading
 - **Left panel — three real-time filter sections** (all changes apply instantly, no Apply button needed):
   - **Action** — independently toggle Checkouts, Denied, and Unsupported events; All / None buttons
   - **Series** — click any series to show/hide it on the chart; All / None buttons (in By Feature mode this becomes a Users/Computers filter)
-  - **Features** — per-feature sub-filter (visible in User and Computer views); All / None buttons; expands dynamically from the bottom
+  - **Features** — per-feature sub-filter (visible in User and Computer views); All / None buttons; expands dynamically from the bottom; filter panel stays visible when all items are deselected so you can re-select without losing context
 - **Seven report types** (Report tab):
   - Feature Usage by Date *(matches original Python output)*
   - User Summary
