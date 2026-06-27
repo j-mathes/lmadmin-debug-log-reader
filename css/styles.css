@@ -263,10 +263,12 @@ body {
     position: relative;
     flex: 1;
     min-height: 260px;
+    overflow-x: auto;
+    overflow-y: hidden;
 }
+
 .chart-wrap canvas {
-    width: 100% !important;
-    height: 100% !important;
+    display: block;
 }
 
 .empty-state {

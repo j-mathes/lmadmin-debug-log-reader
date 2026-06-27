@@ -226,6 +226,23 @@
                     <option value="0">All</option>
                 </select>
             </div>
+            <div class="srow">
+                <div class="slabel">
+                    <label for="s-chart-scroll">Horizontal Scroll</label>
+                    <small>When enabled, the chart expands to show all X-axis labels instead of compressing them.</small>
+                </div>
+                <select id="s-chart-scroll" class="sinput">
+                    <option value="true">Enabled</option>
+                    <option value="false">Disabled</option>
+                </select>
+            </div>
+            <div class="srow">
+                <div class="slabel">
+                    <label for="s-chart-min-col-width">Min. Pixels per Label</label>
+                    <small>Minimum horizontal space (px) per date label when scroll is enabled. Increase for more spacing.</small>
+                </div>
+                <input type="number" id="s-chart-min-col-width" class="sinput" min="10" max="200" step="5" value="40">
+            </div>
         </section>
 
         <div class="settings-actions">

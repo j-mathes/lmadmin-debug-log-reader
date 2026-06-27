@@ -6,12 +6,14 @@
 
 // ── Defaults ─────────────────────────────────────────────────────────────────
 const DEFAULTS = {
-    vendorDaemon : 'geoslope',
-    featurePrefix: 'pkc_',
-    theme        : 'light',
-    chartType    : 'line',
-    viewBy       : 'feature',
-    topN         : 10,
+    vendorDaemon     : 'geoslope',
+    featurePrefix    : 'pkc_',
+    theme            : 'light',
+    chartType        : 'line',
+    viewBy           : 'feature',
+    topN             : 10,
+    chartScroll      : true,
+    chartMinColWidth : 40,
     colors: [
         '#4e79a7','#f28e2b','#e15759','#76b7b2','#59a14f',
         '#edc948','#b07aa1','#ff9da7','#9c755f','#bab0ac'
@@ -51,9 +53,11 @@ const Settings = {
         State.settings.vendorDaemon  = el('s-vendor').value.trim()  || DEFAULTS.vendorDaemon;
         State.settings.featurePrefix = el('s-prefix').value.trim();
         State.settings.theme         = el('s-theme').value;
-        State.settings.chartType     = el('s-chart-type').value;
-        State.settings.viewBy        = el('s-view-by').value;
-        State.settings.topN          = parseInt(el('s-top-n').value, 10) || 10;
+        State.settings.chartType        = el('s-chart-type').value;
+        State.settings.viewBy           = el('s-view-by').value;
+        State.settings.topN             = parseInt(el('s-top-n').value, 10) || 10;
+        State.settings.chartScroll      = el('s-chart-scroll').value === 'true';
+        State.settings.chartMinColWidth = parseInt(el('s-chart-min-col-width').value, 10) || 40;
         State.settings.colors        = Array.from(
             document.querySelectorAll('#color-palette input[type="color"]')
         ).map(i => i.value);
@@ -64,9 +68,11 @@ const Settings = {
         el('s-vendor').value        = State.settings.vendorDaemon;
         el('s-prefix').value        = State.settings.featurePrefix;
         el('s-theme').value         = State.settings.theme;
-        el('s-chart-type').value    = State.settings.chartType;
-        el('s-view-by').value       = State.settings.viewBy;
-        el('s-top-n').value         = String(State.settings.topN);
+        el('s-chart-type').value         = State.settings.chartType;
+        el('s-view-by').value            = State.settings.viewBy;
+        el('s-top-n').value              = String(State.settings.topN);
+        el('s-chart-scroll').value       = String(State.settings.chartScroll);
+        el('s-chart-min-col-width').value = String(State.settings.chartMinColWidth);
         // Sync chart toolbar defaults
         el('view-by').value         = State.settings.viewBy;
         el('chart-type').value      = State.settings.chartType;
@@ -295,12 +301,19 @@ function renderChart() {
     const emptyEl  = el('empty-state');
     const emptyMsg = el('empty-msg');
     const canvas   = el('main-chart');
+    const wrap     = el('chart-wrap');
+
+    function resetCanvas() {
+        canvas.style.width  = '';
+        canvas.style.height = '';
+    }
 
     // No files loaded at all
     if (State.events.length === 0) {
         emptyMsg.innerHTML = 'Drop log files here or use <strong>File &#9660; &rarr; Load Log File(s)</strong>';
         emptyEl.classList.remove('hidden');
         canvas.style.display = 'none';
+        resetCanvas();
         destroyChart();
         return;
     }
@@ -311,6 +324,7 @@ function renderChart() {
         emptyMsg.textContent = 'No data matches the current filters.';
         emptyEl.classList.remove('hidden');
         canvas.style.display = 'none';
+        resetCanvas();
         destroyChart();
         return;
     }
@@ -367,7 +381,7 @@ function renderChart() {
                 x: {
                     stacked: stacked,
                     grid   : { color: grid },
-                    ticks  : { color: tick, maxRotation: 45, maxTicksLimit: 20, font: { size: 11 } }
+                    ticks  : { color: tick, maxRotation: 45, maxTicksLimit: State.settings.chartScroll ? labels.length : 20, font: { size: 11 } }
                 },
                 y: {
                     stacked  : stacked,
@@ -380,7 +394,27 @@ function renderChart() {
         }
     };
 
-    destroyChart();
+    // Scroll mode: disable Chart.js responsive resizing and size the canvas
+    // explicitly so chart-wrap's overflow-x:auto can trigger a scrollbar.
+    const useScroll = State.settings.chartScroll && labels.length > 1;
+    if (useScroll) {
+        const desiredW = Math.max(
+            wrap.clientWidth,
+            labels.length * State.settings.chartMinColWidth
+        );
+        const wrapH = Math.max(wrap.clientHeight, 260);
+        config.options.responsive = false;
+        destroyChart();
+        canvas.style.width  = desiredW + 'px';
+        canvas.style.height = wrapH + 'px';
+        canvas.width        = desiredW;
+        canvas.height       = wrapH;
+    } else {
+        config.options.responsive = true;
+        destroyChart();
+        resetCanvas();
+    }
+
     State.chart = new Chart(canvas, config);
 }
 
