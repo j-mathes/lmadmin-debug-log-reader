@@ -98,3 +98,11 @@ Monday are lighter; weekends are minimal (when enabled).
 | Computer names | `WORKSTATION-A01`, `LAPTOP-L01`, etc. |
 | Feature names | **Preserved** — they are technical product codes, not PII |
 | Vendor daemon | **Preserved** — detected from source files |
+
+## License
+
+Copyright (c) 2026 Jared Mathes
+
+This project is licensed under the [Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License](https://creativecommons.org/licenses/by-nc-sa/4.0/).
+
+See the [LICENSE](../LICENSE) file in the project root for full details.

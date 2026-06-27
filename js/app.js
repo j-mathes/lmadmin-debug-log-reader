@@ -182,6 +182,10 @@ function loadFiles(fileList) {
         }).catch(() => {
             pending--;
             toast(`Could not read: ${file.name}`);
+            if (pending === 0) {
+                setDateRangeFromData();
+                refreshAll();
+            }
         });
     });
 }
