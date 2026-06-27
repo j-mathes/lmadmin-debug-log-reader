@@ -181,7 +181,13 @@ Each report includes:
 
 ## License
 
-This software is provided under a permissive license. See the header comments in the source file for full license text.
+Copyright (c) 2026 Jared Mathes
+
+This project is licensed under the [Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License](https://creativecommons.org/licenses/by-nc-sa/4.0/).
+
+[![CC BY-NC-SA 4.0](https://licensebuttons.net/l/by-nc-sa/4.0/88x31.png)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
+
+You are free to share and adapt this work for non-commercial purposes, provided you give appropriate credit and distribute your contributions under the same license. See the [LICENSE](LICENSE) file for full details.
 
 ## Contributing
 

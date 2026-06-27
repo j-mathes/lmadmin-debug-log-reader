@@ -1,7 +1,12 @@
-# Copyright (c) 2025
-# Author: Jared Mathes
-# Permission to use, copy, modify, and/or distribute this software for any purpose with or without fee is hereby granted.
-# THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+# lmadmin Debug Log Reader — lmadmin_feature_usage_summary.py
+# Copyright (c) 2026 Jared Mathes
+#
+# Licensed under the Creative Commons Attribution-NonCommercial-ShareAlike
+# 4.0 International License. You may not use this file except in compliance
+# with the License. You may obtain a copy of the License at:
+#     https://creativecommons.org/licenses/by-nc-sa/4.0/
+#
+# See the LICENSE file in the project root for full license text.
 
 import re
 from collections import defaultdict

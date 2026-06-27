@@ -1,5 +1,11 @@
 'use strict';
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   lmadmin Debug Log Reader — parser.js
+   Copyright (c) 2026 Jared Mathes
+   Licensed under CC BY-NC-SA 4.0 — https://creativecommons.org/licenses/by-nc-sa/4.0/
+   ═══════════════════════════════════════════════════════════════════════════ */
+
 /**
  * LogParser — mirrors the logic of lmadmin_feature_usage_summary.py
  *

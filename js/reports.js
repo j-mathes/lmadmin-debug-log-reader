@@ -1,5 +1,11 @@
 'use strict';
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   lmadmin Debug Log Reader — reports.js
+   Copyright (c) 2026 Jared Mathes
+   Licensed under CC BY-NC-SA 4.0 — https://creativecommons.org/licenses/by-nc-sa/4.0/
+   ═══════════════════════════════════════════════════════════════════════════ */
+
 /**
  * Reports — generates plain-text or Markdown reports from parsed event data.
  *

@@ -1,6 +1,12 @@
 'use strict';
 
 /* ═══════════════════════════════════════════════════════════════════════════
+   lmadmin Debug Log Reader — app.js
+   Copyright (c) 2026 Jared Mathes
+   Licensed under CC BY-NC-SA 4.0 — https://creativecommons.org/licenses/by-nc-sa/4.0/
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ═══════════════════════════════════════════════════════════════════════════
    app.js — main controller for lmadmin Log Viewer
    ═══════════════════════════════════════════════════════════════════════════ */
 
@@ -57,7 +63,8 @@ const Settings = {
         State.settings.theme         = el('s-theme').value;
         State.settings.chartType        = el('s-chart-type').value;
         State.settings.viewBy           = el('s-view-by').value;
-        State.settings.topN             = parseInt(el('s-top-n').value, 10) || 10;
+        const rawN = parseInt(el('s-top-n').value, 10);
+        State.settings.topN             = Number.isNaN(rawN) ? 10 : rawN;
         State.settings.chartScroll      = el('s-chart-scroll').value === 'true';
         State.settings.chartMinColWidth = parseInt(el('s-chart-min-col-width').value, 10) || 40;
         State.settings.colors        = Array.from(
