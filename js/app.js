@@ -689,7 +689,7 @@ function exportReport() {
         Reports.TYPES.forEach(({ key }, i) =>
             setTimeout(() => downloadBlob(
                 new Blob([Reports.generate(key, events, sourceStr, format)], { type: 'text/plain' }),
-                `${ts}_${key}.${ext}`
+                `lmadmin-report-${key}-${ts}.${ext}`
             ), i * 350)
         );
         toast(`Exporting ${Reports.TYPES.length} .${ext} files\u2026`);
@@ -701,7 +701,7 @@ function exportReport() {
         toast('Generate a report first.');
         return;
     }
-    downloadBlob(new Blob([text], { type: 'text/plain' }), `${ts}_${type}.${ext}`);
+    downloadBlob(new Blob([text], { type: 'text/plain' }), `lmadmin-report-${type}-${ts}.${ext}`);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -740,14 +740,17 @@ function exportChart(format) {
     closeExportChartModal();
     if (!State.chart) return;
 
-    const date = new Date().toISOString().slice(0, 10);
+    const ts        = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+    const viewBy    = el('view-by').value;
+    const chartType = el('chart-type').value;
+    const stem      = `lmadmin-chart-${viewBy}-${chartType}-${ts}`;
     const a = document.createElement('a');
 
     if (format === 'svg') {
         const svgStr = buildVectorSVG();
         const blob = new Blob([svgStr], { type: 'image/svg+xml' });
         a.href     = URL.createObjectURL(blob);
-        a.download = `lmadmin-chart-${date}.svg`;
+        a.download = `${stem}.svg`;
     } else {
         // PNG / JPEG — composite canvas with manually drawn legend
         const chartCanvas = State.chart.canvas;
@@ -830,10 +833,10 @@ function exportChart(format) {
 
         if (format === 'jpeg') {
             a.href = off.toDataURL('image/jpeg', 0.95);
-            a.download = `lmadmin-chart-${date}.jpg`;
+            a.download = `${stem}.jpg`;
         } else {
             a.href = off.toDataURL('image/png');
-            a.download = `lmadmin-chart-${date}.png`;
+            a.download = `${stem}.png`;
         }
     }
 
