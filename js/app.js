@@ -16,7 +16,9 @@ const DEFAULTS = {
     chartMinColWidth : 40,
     colors: [
         '#4e79a7','#f28e2b','#e15759','#76b7b2','#59a14f',
-        '#edc948','#b07aa1','#ff9da7','#9c755f','#bab0ac'
+        '#edc948','#b07aa1','#ff9da7','#9c755f','#bab0ac',
+        '#1f77b4','#ff7f0e','#2ca02c','#d62728','#9467bd',
+        '#8c564b','#e377c2','#7f7f7f','#bcbd22','#17becf'
     ]
 };
 
@@ -88,9 +90,29 @@ const Settings = {
             div.className = 'color-swatch';
             div.innerHTML =
                 `<input type="color" value="${color}" title="Series ${i + 1}">` +
-                `<label>${i + 1}</label>`;
+                `<label>${i + 1}</label>` +
+                `<button class="swatch-remove" title="Remove">&times;</button>`;
+            div.querySelector('.swatch-remove').addEventListener('click', () => {
+                if (State.settings.colors.length <= 1) return;
+                // Capture current edited values before splicing
+                State.settings.colors = Array.from(
+                    document.querySelectorAll('#color-palette input[type="color"]')
+                ).map(inp => inp.value);
+                State.settings.colors.splice(i, 1);
+                this._renderPalette();
+            });
             container.appendChild(div);
         });
+    },
+
+    addColor() {
+        // Save current edits, then append a new color cycling through the defaults
+        State.settings.colors = Array.from(
+            document.querySelectorAll('#color-palette input[type="color"]')
+        ).map(inp => inp.value);
+        const pool = DEFAULTS.colors;
+        State.settings.colors.push(pool[State.settings.colors.length % pool.length]);
+        this._renderPalette();
     },
 
     exportJSON() {
@@ -207,7 +229,7 @@ function updateStats() {
         el('stat-range').textContent =
             dates[0] === dates[dates.length - 1]
                 ? dates[0]
-                : `${dates[0]}\u2013${dates[dates.length - 1]}`;
+                : `${dates[0]} \u2013 ${dates[dates.length - 1]}`;
     } else {
         el('stat-range').textContent = '\u2014';
     }
@@ -319,6 +341,7 @@ function renderChart() {
         canvas.style.display = 'none';
         resetCanvas();
         destroyChart();
+        el('chart-legend').innerHTML = '';
         return;
     }
 
@@ -330,6 +353,7 @@ function renderChart() {
         canvas.style.display = 'none';
         resetCanvas();
         destroyChart();
+        el('chart-legend').innerHTML = '';
         return;
     }
 
@@ -371,10 +395,7 @@ function renderChart() {
             maintainAspectRatio: false,
             interaction: { mode: 'index', intersect: false },
             plugins: {
-                legend: {
-                    position: 'bottom',
-                    labels  : { boxWidth: 12, padding: 14, color: tick, font: { size: 11 } }
-                },
+                legend: { display: false },
                 tooltip: {
                     callbacks: {
                         title: ctx => `Date: ${ctx[0].label}`
@@ -420,6 +441,36 @@ function renderChart() {
     }
 
     State.chart = new Chart(canvas, config);
+    renderLegend();
+}
+
+function renderLegend() {
+    const container = el('chart-legend');
+    container.innerHTML = '';
+    if (!State.chart) return;
+    State.chart.data.datasets.forEach((ds, i) => {
+        const item = document.createElement('div');
+        item.className = 'legend-item';
+        if (!State.chart.isDatasetVisible(i)) item.classList.add('series-hidden');
+
+        const swatch = document.createElement('span');
+        swatch.className = 'legend-swatch';
+        swatch.style.background = ds.borderColor;
+
+        const lbl = document.createElement('span');
+        lbl.textContent = ds.label;
+        lbl.title = ds.label;
+
+        item.appendChild(swatch);
+        item.appendChild(lbl);
+        item.addEventListener('click', () => {
+            const nowVisible = State.chart.isDatasetVisible(i);
+            State.chart.setDatasetVisibility(i, !nowVisible);
+            State.chart.update();
+            item.classList.toggle('series-hidden', nowVisible);
+        });
+        container.appendChild(item);
+    });
 }
 
 function destroyChart() {
@@ -630,6 +681,7 @@ function initListeners() {
     });
 
     el('export-settings-btn').addEventListener('click', () => Settings.exportJSON());
+    el('add-color-btn').addEventListener('click', () => Settings.addColor());
 
     el('import-settings-file').addEventListener('change', e => {
         if (e.target.files[0]) Settings.importJSON(e.target.files[0]);

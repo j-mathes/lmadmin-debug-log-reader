@@ -18,7 +18,7 @@ An interactive, browser-based GUI requiring no installation or server.
 ### Features
 
 - **Load multiple log files** — drag & drop or use File menu; data accumulates across files
-- **Interactive chart** — line, bar, or stacked-bar chart with dates on X-axis and counts on Y-axis
+- **Interactive chart** — line, bar, or stacked-bar chart with dates on X-axis and counts on Y-axis; scrollable sidebar legend with click-to-toggle series
 - **Three view modes** — visualise usage by Feature, User, or Computer
 - **Action filter checkboxes** — independently toggle Checkouts, Denied, and Unsupported events in any combination
 - **Horizontal scroll** — when enabled the chart expands to show every date label; configurable minimum pixels per label
@@ -39,7 +39,7 @@ An interactive, browser-based GUI requiring no installation or server.
   - Vendor daemon name (default: `geoslope`)
   - Feature prefix filter (default: `pkc_`)
   - Light / dark theme
-  - Customisable chart colour palette (10 series colours)
+  - Customisable chart colour palette — configurable number of colours; add or remove swatches individually
   - Default chart type and Top N
   - Horizontal scroll on/off and minimum pixels per date label
   - Settings persisted to `localStorage`; importable/exportable as JSON

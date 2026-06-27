@@ -110,11 +110,14 @@
             <button class="btn-ghost" id="reset-btn">Reset</button>
         </div>
 
-        <div class="chart-wrap" id="chart-wrap">
-            <canvas id="main-chart"></canvas>
-            <div class="empty-state" id="empty-state">
-                <div class="empty-icon">&#128194;</div>
-                <p id="empty-msg">Drop log files here or use <strong>File &#9660; &rarr; Load Log File(s)</strong></p>
+        <div class="chart-body">
+            <div id="chart-legend" class="chart-legend"></div>
+            <div class="chart-wrap" id="chart-wrap">
+                <canvas id="main-chart"></canvas>
+                <div class="empty-state" id="empty-state">
+                    <div class="empty-icon">&#128194;</div>
+                    <p id="empty-msg">Drop log files here or use <strong>File &#9660; &rarr; Load Log File(s)</strong></p>
+                </div>
             </div>
         </div>
     </div>
@@ -196,6 +199,7 @@
                     <small>Colors used for chart series in order.</small>
                 </div>
                 <div id="color-palette" class="color-palette"></div>
+                <button class="btn-secondary" id="add-color-btn" style="margin-top:8px;font-size:12px;padding:4px 12px">+ Add Color</button>
             </div>
         </section>
 
