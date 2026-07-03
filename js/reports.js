@@ -24,7 +24,7 @@ const Reports = {
         { key: 'user-summary',     label: 'User Summary'                },
         { key: 'computer-summary', label: 'Computer Summary'            },
         { key: 'feature-totals',   label: 'Feature Totals (All Time)'   },
-        { key: 'denial-report',    label: 'Denial & Unsupported Report' },
+        { key: 'denial-report',    label: 'Denial, Unsupported & Expired Report' },
         { key: 'top-users',        label: 'Top Users by Checkout'       },
         { key: 'top-features',     label: 'Top Features by Checkout'    },
     ],
@@ -94,7 +94,7 @@ const Reports = {
         for (const e of events) {
             if (!byDate[e.date]) byDate[e.date] = {};
             if (!byDate[e.date][e.feature])
-                byDate[e.date][e.feature] = { OUT: 0, DENIED: 0, UNSUPPORTED: 0 };
+                byDate[e.date][e.feature] = { OUT: 0, DENIED: 0, UNSUPPORTED: 0, EXPIRED: 0 };
             const c = byDate[e.date][e.feature];
             if (c[e.action] !== undefined) c[e.action]++;
         }
@@ -105,12 +105,12 @@ const Reports = {
             const parts = [];
             for (const date of dates) {
                 parts.push(`### ${date}\n`);
-                parts.push('| Feature | Checkouts | Denied | Unsupported |');
-                parts.push('|:---|---:|---:|---:|');
+                parts.push('| Feature | Checkouts | Denied | Unsupported | Expired |');
+                parts.push('|:---|---:|---:|---:|---:|');
                 for (const feat of Object.keys(byDate[date]).sort()) {
                     const c = byDate[date][feat];
-                    if (c.OUT + c.DENIED + c.UNSUPPORTED > 0)
-                        parts.push(`| \`${feat}\` | ${c.OUT} | ${c.DENIED} | ${c.UNSUPPORTED} |`);
+                    if (c.OUT + c.DENIED + c.UNSUPPORTED + c.EXPIRED > 0)
+                        parts.push(`| \`${feat}\` | ${c.OUT} | ${c.DENIED} | ${c.UNSUPPORTED} | ${c.EXPIRED} |`);
                 }
                 parts.push('');
             }
@@ -120,14 +120,15 @@ const Reports = {
         const out = [];
         for (const date of dates) {
             out.push(`Date: ${date}`);
-            const usageL = [], deniedL = [], unsuppL = [];
+            const usageL = [], deniedL = [], unsuppL = [], expiredL = [];
             for (const feat of Object.keys(byDate[date]).sort()) {
                 const c = byDate[date][feat];
                 if (c.OUT        > 0) usageL.push(`  Count: ${c.OUT}, Feature: ${feat}`);
                 if (c.DENIED     > 0) deniedL.push(`  Count: ${c.DENIED}, DENIED: ${feat}, (Licensed number of users already reached. (-4,342))`);
                 if (c.UNSUPPORTED > 0) unsuppL.push(`  Count: ${c.UNSUPPORTED}, UNSUPPORTED: ${feat}, (No such feature exists. (-5,346))`);
+                if (c.EXPIRED    > 0) expiredL.push(`  Count: ${c.EXPIRED}, EXPIRED: ${feat}, (Feature license is expired.)`);
             }
-            out.push(...usageL, ...deniedL, ...unsuppL, '');
+            out.push(...usageL, ...deniedL, ...unsuppL, ...expiredL, '');
         }
         return out.join('\n');
     },
@@ -216,7 +217,7 @@ const Reports = {
         const totals = {};
         for (const e of events) {
             if (!totals[e.feature])
-                totals[e.feature] = { OUT: 0, DENIED: 0, UNSUPPORTED: 0,
+                totals[e.feature] = { OUT: 0, DENIED: 0, UNSUPPORTED: 0, EXPIRED: 0,
                                       users: new Set(), computers: new Set() };
             const t = totals[e.feature];
             if (t[e.action] !== undefined) t[e.action]++;
@@ -227,27 +228,29 @@ const Reports = {
 
         if (format === 'markdown') {
             const rows = [
-                '| Feature | Checkouts | Denied | Unsupported | Unique Users | Computers |',
-                '|:---|---:|---:|---:|---:|---:|',
+                '| Feature | Checkouts | Denied | Unsupported | Expired | Unique Users | Computers |',
+                '|:---|---:|---:|---:|---:|---:|---:|',
             ];
             for (const [feat, c] of sorted)
-                rows.push(`| \`${feat}\` | ${c.OUT} | ${c.DENIED} | ${c.UNSUPPORTED} | ${c.users.size} | ${c.computers.size} |`);
+                rows.push(`| \`${feat}\` | ${c.OUT} | ${c.DENIED} | ${c.UNSUPPORTED} | ${c.EXPIRED} | ${c.users.size} | ${c.computers.size} |`);
             return rows.join('\n');
         }
 
         const SEP = '\u2500';
-        const hdr = `${'Feature'.padEnd(38)}${'Checkouts'.padStart(10)}${'Denied'.padStart(8)}${'Unsupport'.padStart(10)}${'Users'.padStart(7)}${'Computers'.padStart(10)}`;
-        const rows = [hdr, SEP.repeat(83)];
+        const hdr = `${'Feature'.padEnd(32)}${'Checkouts'.padStart(10)}${'Denied'.padStart(8)}${'Unsupport'.padStart(10)}${'Expired'.padStart(9)}${'Users'.padStart(7)}${'Computers'.padStart(10)}`;
+        const rows = [hdr, SEP.repeat(86)];
         for (const [feat, c] of sorted)
-            rows.push(`${feat.padEnd(38)}${String(c.OUT).padStart(10)}${String(c.DENIED).padStart(8)}${String(c.UNSUPPORTED).padStart(10)}${String(c.users.size).padStart(7)}${String(c.computers.size).padStart(10)}`);
+            rows.push(`${feat.padEnd(32)}${String(c.OUT).padStart(10)}${String(c.DENIED).padStart(8)}${String(c.UNSUPPORTED).padStart(10)}${String(c.EXPIRED).padStart(9)}${String(c.users.size).padStart(7)}${String(c.computers.size).padStart(10)}`);
         return rows.join('\n');
     },
 
-    /* ── Denial & Unsupported Report ───────────────────────────────────────── */
+    /* ── Denial, Unsupported & Expired Report ──────────────────────────────── */
 
     denialReport(events, format = 'text') {
-        const relevant = events.filter(e => e.action === 'DENIED' || e.action === 'UNSUPPORTED');
-        if (!relevant.length) return 'No denial or unsupported events found.';
+        const relevant = events.filter(e =>
+            e.action === 'DENIED' || e.action === 'UNSUPPORTED' || e.action === 'EXPIRED'
+        );
+        if (!relevant.length) return 'No denial, unsupported, or expired events found.';
 
         const byDate = {};
         for (const e of relevant) {
@@ -274,8 +277,11 @@ const Reports = {
             for (const e of byDate[date]) {
                 const reason = e.action === 'DENIED'
                     ? 'Licensed number of users already reached. (-4,342)'
-                    : 'No such feature exists. (-5,346)';
-                out.push(`  ${e.action}: ${e.feature}  by ${e.userComputer}  [${reason}]`);
+                    : e.action === 'UNSUPPORTED'
+                        ? 'No such feature exists. (-5,346)'
+                        : 'Feature license is expired.';
+                const actor = e.userComputer ? `  by ${e.userComputer}` : '';
+                out.push(`  ${e.action}: ${e.feature}${actor}  [${reason}]`);
             }
             out.push('');
         }

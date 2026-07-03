@@ -228,6 +228,7 @@ function updateStats() {
     const users     = new Set(out.map(e => e.user));
     const computers = new Set(out.map(e => e.computer));
     const denied    = evts.filter(e => e.action === 'DENIED');
+    const expired   = evts.filter(e => e.action === 'EXPIRED');
     const dates     = [...new Set(evts.map(e => e.date))].sort();
 
     el('stat-checkouts').textContent = out.length.toLocaleString();
@@ -235,6 +236,9 @@ function updateStats() {
     el('stat-users').textContent     = users.size;
     el('stat-computers').textContent = computers.size;
     el('stat-denied').textContent    = denied.length.toLocaleString();
+    if (el('stat-expired')) {
+        el('stat-expired').textContent = expired.length.toLocaleString();
+    }
 
     if (dates.length > 0) {
         el('stat-range').textContent =
@@ -290,6 +294,7 @@ function getChartEvents() {
     if (el('act-out')?.checked !== false)         actions.add('OUT');
     if (el('act-denied')?.checked !== false)      actions.add('DENIED');
     if (el('act-unsupported')?.checked !== false) actions.add('UNSUPPORTED');
+    if (el('act-expired')?.checked !== false)     actions.add('EXPIRED');
 
     const from   = el('date-from').value;
     const to     = el('date-to').value;
@@ -525,6 +530,7 @@ function renderLegend() {
         out:         el('act-out')?.checked ?? true,
         denied:      el('act-denied')?.checked ?? true,
         unsupported: el('act-unsupported')?.checked ?? true,
+        expired:     el('act-expired')?.checked ?? true,
     };
 
     // Capture feature filter state before wiping the panel
@@ -581,6 +587,7 @@ function renderLegend() {
         { id: 'act-out',         label: 'Checkouts',   key: 'out'         },
         { id: 'act-denied',      label: 'Denied',      key: 'denied'      },
         { id: 'act-unsupported', label: 'Unsupported', key: 'unsupported' },
+        { id: 'act-expired',     label: 'Expired',     key: 'expired'     },
     ].forEach(({ id, label, key }) => {
         const lbl = document.createElement('label');
         lbl.className = 'legend-check';
@@ -855,7 +862,7 @@ function exportChart(format) {
 
         const featCbs = [...document.querySelectorAll('#feature-filter-checks input')];
         const hasFeat = featCbs.length > 0;
-        const legendH = 4 + HDR_H + 3*LINE_H + DIV_H
+        const legendH = 4 + HDR_H + 4*LINE_H + DIV_H
             + HDR_H + State.chart.data.datasets.length * LINE_H
             + (hasFeat ? DIV_H + HDR_H + featCbs.length * LINE_H : 0) + 8;
 
@@ -895,6 +902,7 @@ function exportChart(format) {
         checkRow('Checkouts',   el('act-out')?.checked         ?? true);
         checkRow('Denied',      el('act-denied')?.checked      ?? true);
         checkRow('Unsupported', el('act-unsupported')?.checked ?? true);
+        checkRow('Expired',     el('act-expired')?.checked     ?? true);
         divLine();
         secTitle('Series');
         State.chart.data.datasets.forEach((ds, i) => {
@@ -953,7 +961,7 @@ function buildVectorSVG() {
 
     const featCbs = [...document.querySelectorAll('#feature-filter-checks input')];
     const hasFeat = featCbs.length > 0;
-    const legendH = 4 + HDR_H + 3*LINE_H + DIV_H
+    const legendH = 4 + HDR_H + 4*LINE_H + DIV_H
         + HDR_H + chart.data.datasets.length * LINE_H
         + (hasFeat ? DIV_H + HDR_H + featCbs.length * LINE_H : 0) + 8;
 
@@ -993,6 +1001,7 @@ function buildVectorSVG() {
     lgCheck('Checkouts',   el('act-out')?.checked         ?? true);
     lgCheck('Denied',      el('act-denied')?.checked      ?? true);
     lgCheck('Unsupported', el('act-unsupported')?.checked ?? true);
+    lgCheck('Expired',     el('act-expired')?.checked     ?? true);
     lgDiv();
 
     lgTitle('Series');
@@ -1203,9 +1212,10 @@ function initListeners() {
     el('apply-btn').addEventListener('click', renderChart);
     el('split-feature').addEventListener('change', renderChart);
     el('reset-btn').addEventListener('click', () => {
-        el('act-out').checked         = true;
-        el('act-denied').checked      = true;
-        el('act-unsupported').checked = true;
+        if (el('act-out'))         el('act-out').checked = true;
+        if (el('act-denied'))      el('act-denied').checked = true;
+        if (el('act-unsupported')) el('act-unsupported').checked = true;
+        if (el('act-expired'))     el('act-expired').checked = true;
         // Clear feature filter so all features default to checked on next render
         const ffc = el('feature-filter-checks');
         if (ffc) ffc.innerHTML = '';

@@ -24,13 +24,14 @@ const LogParser = {
      *
      * @param {string}  content      - Raw text of the log file
      * @param {string}  vendorDaemon - Daemon name to match, e.g. "geoslope"
-     * @param {string}  sourceFile   - Filename label attached to each event
-     * @returns {Array<{date, feature, user, computer, userComputer, action, sourceFile}>}
+    * @param {string}  sourceFile   - Filename label attached to each event
+    * @returns {Array<{date, feature, user, computer, userComputer, action, sourceFile}>}
      */
     parse(content, vendorDaemon, sourceFile) {
         const events  = [];
         const lines   = content.split(/\r?\n/);
-        let   curDate = null;
+                let   curDate = null;
+                const expiredSeen = new Set();
 
         // Date pattern group 1/2: "Start-Date: Mon Jan 15 2025 09:30:15 W. …"
         //                                  or  "Time: …"
@@ -38,9 +39,12 @@ const LogParser = {
         const dateRe = /(?:Start-Date:|Time:)\s+(.+?)\s+W\.|TIMESTAMP\s+(\d{2}\/\d{2}\/\d{4})/;
 
         const daemon    = this._escRx(vendorDaemon || 'geoslope');
-        const logRe     = new RegExp(
+        const userLogRe = new RegExp(
             `\\(${daemon}\\)\\s+(OUT|IN|DENIED|UNSUPPORTED):\\s+"([^"]+)"` +
             `(?:\\s+\\(PORT_AT_HOST_PLUS\\s*\\))?\\s+(\\w+@\\w+)`
+        );
+        const expiredRe = new RegExp(
+            `\\(${daemon}\\)\\s+EXPIRED:\\s+(?:"([^"]+)"|(\\S+))`
         );
 
         for (const line of lines) {
@@ -51,15 +55,37 @@ const LogParser = {
                 continue;
             }
             if (!curDate) continue;
-            const lm = logRe.exec(line);
-            if (!lm) continue;
+            const lm = userLogRe.exec(line);
+            if (lm) {
+                const [, action, feature, userComputer] = lm;
+                const atIdx   = userComputer.indexOf('@');
+                const user     = atIdx >= 0 ? userComputer.slice(0, atIdx)     : userComputer;
+                const computer = atIdx >= 0 ? userComputer.slice(atIdx + 1)    : '';
 
-            const [, action, feature, userComputer] = lm;
-            const atIdx   = userComputer.indexOf('@');
-            const user     = atIdx >= 0 ? userComputer.slice(0, atIdx)     : userComputer;
-            const computer = atIdx >= 0 ? userComputer.slice(atIdx + 1)    : '';
+                events.push({ date: curDate, feature, user, computer, userComputer, action, sourceFile });
+                continue;
+            }
 
-            events.push({ date: curDate, feature, user, computer, userComputer, action, sourceFile });
+            const em = expiredRe.exec(line);
+            if (!em) continue;
+
+            const feature = em[1] || em[2];
+            const rawTime = this._extractTime(line);
+            if (rawTime) {
+                const dedupeKey = `${sourceFile || ''}|${curDate}|${rawTime}|${feature}`;
+                if (expiredSeen.has(dedupeKey)) continue;
+                expiredSeen.add(dedupeKey);
+            }
+
+            events.push({
+                date: curDate,
+                feature,
+                user: '',
+                computer: '',
+                userComputer: '',
+                action: 'EXPIRED',
+                sourceFile
+            });
         }
 
         return events;
@@ -84,6 +110,16 @@ const LogParser = {
     _parseMDY(str) {
         const [mm, dd, yyyy] = str.split('/');
         return `${yyyy}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`;
+    },
+
+    /**
+     * Extract and normalize leading HH:MM:SS timestamp from a log line.
+     * Handles variants like "14:42:01" and "14:42: 01".
+     */
+    _extractTime(line) {
+        const m = /^\s*(\d{1,2}):(\d{2}):\s?(\d{2})/.exec(line);
+        if (!m) return '';
+        return `${m[1].padStart(2, '0')}:${m[2]}:${m[3]}`;
     },
 
     _escRx(s) {

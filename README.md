@@ -1,7 +1,5 @@
 # lmadmin Debug Log Reader
 
-**Live demo:** [https://j-mathes.github.io/lmadmin-debug-log-reader/](https://j-mathes.github.io/lmadmin-debug-log-reader/)
-
 Tools for parsing and analyzing lmadmin debug log files.  Two independent tools are provided:
 
 - **Web Viewer** (`index.html`) — interactive GUI with charts, filtering, and multiple report types
@@ -26,10 +24,10 @@ An interactive, browser-based GUI requiring no installation or server.
   - **Consolidated** (default) — one series per user/computer, with the Features panel acting as a count filter
   - **By Feature** — series become individual features; the legend Series section becomes a Users/Computers filter so you can see exactly which features each user or computer checked out; each feature in the Features panel shows a colour swatch matching its chart series (grey swatch for features outside the current top-N)
 - **Horizontal scroll** — when enabled the chart expands to show every date label; configurable minimum pixels per label
-- **Summary cards** — instant totals for checkouts, unique features, users, computers, and denials
+- **Summary cards** — instant totals for checkouts, unique features, users, computers, denials, and expired features
 - **Date range filter** — zoom into any time period without reloading
 - **Left panel — three real-time filter sections** (all changes apply instantly, no Apply button needed):
-  - **Action** — independently toggle Checkouts, Denied, and Unsupported events; All / None buttons
+  - **Action** — independently toggle Checkouts, Denied, Unsupported, and Expired events; All / None buttons
   - **Series** — click any series to show/hide it on the chart; All / None buttons (in By Feature mode this becomes a Users/Computers filter)
   - **Features** — per-feature sub-filter (visible in User and Computer views); All / None buttons; expands dynamically from the bottom; filter panel stays visible when all items are deselected so you can re-select without losing context
 - **Seven report types** (Report tab):
@@ -37,7 +35,7 @@ An interactive, browser-based GUI requiring no installation or server.
   - User Summary
   - Computer Summary
   - Feature Totals — sortable all-time table
-  - Denial & Unsupported Report
+  - Denial, Unsupported & Expired Report
   - Top Users by Checkout
   - Top Features by Checkout
   - **All Reports (Combined View)** — displays every report in one scrollable output
@@ -117,15 +115,22 @@ The script recognizes these date patterns in log files:
 - `Time: Day Mon DD YYYY HH:MM:SS`
 - `TIMESTAMP MM/DD/YYYY`
 
+The parser recognizes these action entries:
+- `OUT`, `IN`, `DENIED`, `UNSUPPORTED`
+- `EXPIRED:` (with colon)
+
+For `EXPIRED:` lines, repeated entries for the same feature at the same timestamp are collapsed into a single reported event.
+
 ### Vendor Daemon Configuration
 
-By default, the script looks for entries from the "geoslope" vendor daemon. To use with different vendor daemons, modify line 22:
+By default, the script looks for entries from the `geoslope` vendor daemon. To use a different vendor daemon, update the parser regex patterns in `parse_log_file()`:
 
 ```python
 log_pattern = re.compile(r"\((your_vendor_name)\) (OUT|IN|DENIED|UNSUPPORTED): \"(pkc_\w+)\"(?: \(PORT_AT_HOST_PLUS\s+\))? (\w+@\w+)")
+expired_pattern = re.compile(r"\((your_vendor_name)\) EXPIRED:\s+(?:\"([^\"]+)\"|(\S+))")
 ```
 
-Replace `geoslope` with your vendor daemon name.
+Replace `your_vendor_name` with your vendor daemon name.
 
 ## Output Format
 
@@ -137,12 +142,14 @@ Date: 2025-01-15
   Count: 5, Feature: pkc_feature_name
   Count: 2, DENIED: pkc_another_feature, (Licensed number of users already reached. (-4,342))
   Count: 1, UNSUPPORTED: pkc_unknown_feature, (No such feature exists. (-5,346))
+  Count: 1, EXPIRED: pkc_legacy_feature, (Feature license is expired.)
 ```
 
 ### Report Sections
 - **Count**: Number of successful feature checkouts
 - **DENIED**: License denials due to insufficient available licenses
 - **UNSUPPORTED**: Requests for non-existent features
+- **EXPIRED**: Requests for features with expired licenses
 
 ## Example Log Entries
 
@@ -152,6 +159,7 @@ Start-Date: Mon Jan 15 2025 09:30:15
 (geoslope) OUT: "pkc_slope_w" user@computer
 (geoslope) DENIED: "pkc_slope_w" user2@computer2
 (geoslope) UNSUPPORTED: "pkc_invalid_feature" user3@computer3
+(geoslope) EXPIRED: pkc_legacy_feature
 ```
 
 ## Error Handling
