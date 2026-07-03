@@ -19,6 +19,33 @@
  */
 const LogParser = {
 
+    DAEMON_EXIT_LOOKUP: {
+        '25:2': {
+            title: 'No Valid Hostids',
+            explanation: 'The vendor daemon is shutting down because it cannot find a valid host ID on the server to lock the licenses to. This can be caused by missing or unsupported network adapters.'
+        },
+        '27:4': {
+            title: 'No features to serve',
+            explanation: 'The vendor daemon started, read the license file, but found no valid FEATURE or INCREMENT lines to manage, so it is shutting down as it has no work to do.'
+        },
+        '28:5': {
+            title: 'Lost connection to lmgrd (heartbeat timeout)',
+            explanation: 'The vendor daemon lost its network connection to the main lmgrd process. This is often due to a firewall, network issue, or lmgrd crashing.'
+        },
+        '32:9': {
+            title: 'Another server was running',
+            explanation: 'The vendor daemon detected that another instance of itself for the same vendor was already running and is shutting down to prevent conflicts.'
+        },
+        '51:28': {
+            title: 'Unsupported Virtual Environment',
+            explanation: 'The license file is configured for a specific type of virtual machine using a special HOSTID such as VM_UUID. This error means the server is either not a virtual machine or is running in a virtual environment that is not supported or does not match the license requirements.'
+        },
+        '65:42': {
+            title: 'Trusted storage binding change detected',
+            explanation: 'This is a critical error for activation-based licenses. It means a fundamental characteristic of the machine has changed and the license is no longer trusted.'
+        }
+    },
+
     /**
      * Parse raw log file content into an array of event objects.
      *
@@ -30,13 +57,14 @@ const LogParser = {
     parse(content, vendorDaemon, sourceFile) {
         const events  = [];
         const lines   = content.split(/\r?\n/);
-                let   curDate = null;
-                const expiredSeen = new Set();
+        let   curDate = null;
+        const expiredSeen = new Set();
+        const warningSeen = new Set();
 
         // Date pattern group 1/2: "Start-Date: Mon Jan 15 2025 09:30:15 W. …"
         //                                  or  "Time: …"
         // Date pattern group 3:   "TIMESTAMP 01/15/2025"
-        const dateRe = /(?:Start-Date:|Time:)\s+(.+?)\s+W\.|TIMESTAMP\s+(\d{2}\/\d{2}\/\d{4})/;
+        const dateRe = /(?:Start-Date:|Time:)\s+(.+?)\s+W\.|TIMESTAMP\s+(\d{1,2}\/\d{1,2}\/\d{4})/;
 
         const daemon    = this._escRx(vendorDaemon || 'geoslope');
         const userLogRe = new RegExp(
@@ -45,6 +73,17 @@ const LogParser = {
         );
         const expiredRe = new RegExp(
             `\\(${daemon}\\)\\s+EXPIRED:\\s+(?:"([^"]+)"|(\\S+))`
+        );
+        const warningRe = new RegExp(
+            `\\(${daemon}\\)\\s+Warning:\\s+(.+?)\\s+expires\\s+(\\S+)`,
+            'i'
+        );
+        const lostCommRe = new RegExp(
+            `\\(${daemon}\\)\\s+Lost communications with lmgrd\\.?`,
+            'i'
+        );
+        const daemonExitRe = new RegExp(
+            `\\(${daemon}\\)\\s+EXITING DUE TO SIGNAL\\s+(\\d+)\\s+Exit reason\\s+(\\d+)`
         );
 
         for (const line of lines) {
@@ -67,24 +106,95 @@ const LogParser = {
             }
 
             const em = expiredRe.exec(line);
-            if (!em) continue;
+            if (em) {
+                const feature = em[1] || em[2];
+                const rawTime = this._extractTime(line);
+                if (rawTime) {
+                    const dedupeKey = `${sourceFile || ''}|${curDate}|${rawTime}|${feature}`;
+                    if (expiredSeen.has(dedupeKey)) continue;
+                    expiredSeen.add(dedupeKey);
+                }
 
-            const feature = em[1] || em[2];
-            const rawTime = this._extractTime(line);
-            if (rawTime) {
-                const dedupeKey = `${sourceFile || ''}|${curDate}|${rawTime}|${feature}`;
-                if (expiredSeen.has(dedupeKey)) continue;
-                expiredSeen.add(dedupeKey);
+                events.push({
+                    date: curDate,
+                    feature,
+                    user: '',
+                    computer: '',
+                    userComputer: '',
+                    action: 'EXPIRED',
+                    sourceFile,
+                    category: 'usage'
+                });
+                continue;
             }
+
+            const wm = warningRe.exec(line);
+            if (wm) {
+                const feature = wm[1].trim();
+                const warningExpiresOn = wm[2];
+                const rawTime = this._extractTime(line);
+                if (rawTime) {
+                    const dedupeKey = `${sourceFile || ''}|${curDate}|${rawTime}|${feature}|${warningExpiresOn}`;
+                    if (warningSeen.has(dedupeKey)) continue;
+                    warningSeen.add(dedupeKey);
+                }
+
+                events.push({
+                    date: curDate,
+                    feature,
+                    user: 'Vendor Daemon',
+                    computer: vendorDaemon || 'Vendor Daemon',
+                    userComputer: vendorDaemon ? `Vendor Daemon@${vendorDaemon}` : 'Vendor Daemon',
+                    action: 'WARNING',
+                    sourceFile,
+                    category: 'warning',
+                    warningExpiresOn,
+                    rawMessage: line.trim()
+                });
+                continue;
+            }
+
+            const lc = lostCommRe.exec(line);
+            if (lc) {
+                events.push({
+                    date: curDate,
+                    feature: 'Lost Comm',
+                    user: 'Vendor Daemon',
+                    computer: vendorDaemon || 'Vendor Daemon',
+                    userComputer: vendorDaemon ? `Vendor Daemon@${vendorDaemon}` : 'Vendor Daemon',
+                    action: 'LOST_COMM',
+                    sourceFile,
+                    category: 'lost-comm',
+                    title: 'Lost communications with lmgrd.',
+                    explanation: 'The vendor daemon lost communication with lmgrd.',
+                    rawMessage: line.trim()
+                });
+                continue;
+            }
+
+            const dx = daemonExitRe.exec(line);
+            if (!dx) continue;
+
+            const signalCode = dx[1];
+            const exitReason = dx[2];
+            const lookupKey = `${signalCode}:${exitReason}`;
+            const known = this.DAEMON_EXIT_LOOKUP[lookupKey];
+            const title = known?.title || `Signal ${signalCode} / Exit ${exitReason}`;
 
             events.push({
                 date: curDate,
-                feature,
-                user: '',
-                computer: '',
-                userComputer: '',
-                action: 'EXPIRED',
-                sourceFile
+                feature: `Signal ${signalCode} / Exit ${exitReason}`,
+                user: 'Vendor Daemon',
+                computer: vendorDaemon || 'Vendor Daemon',
+                userComputer: vendorDaemon ? `Vendor Daemon@${vendorDaemon}` : 'Vendor Daemon',
+                action: 'DAEMON_EXIT',
+                sourceFile,
+                category: 'daemon-exit',
+                signalCode,
+                exitReason,
+                title,
+                explanation: known?.explanation || 'Vendor daemon exit event captured from the debug log.',
+                rawMessage: line.trim()
             });
         }
 

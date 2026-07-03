@@ -22,6 +22,7 @@
     --radius:       6px;
     --danger:       #cf222e;
     --success:      #1a7f37;
+    --summary-card-value-font-size: 20px;
 }
 
 body.theme-dark {
@@ -214,11 +215,12 @@ body {
     box-shadow: var(--shadow-sm);
 }
 .card-value {
-    font-size: 26px;
+    font-size: var(--summary-card-value-font-size);
     font-weight: 700;
     color: var(--accent);
     line-height: 1.2;
     letter-spacing: -.02em;
+    overflow-wrap: anywhere;
 }
 .card-label {
     font-size: 10px;
@@ -227,6 +229,11 @@ body {
     text-transform: uppercase;
     letter-spacing: .06em;
     font-weight: 600;
+}
+
+#stat-range {
+    line-height: 1.25;
+    letter-spacing: -.01em;
 }
 
 /* ── Chart panel ─────────────────────────────────────────────────────────── */
@@ -391,6 +398,13 @@ body {
     flex-shrink: 0;
 }
 
+.legend-inline-divider {
+    height: 1px;
+    background: var(--border);
+    margin: 4px 6px;
+    flex-shrink: 0;
+}
+
 .legend-list {
     flex: 1;
     min-height: 0;
@@ -477,6 +491,132 @@ body {
     color: var(--text-muted);
     text-align: center;
     max-width: 340px;
+}
+
+.chart-tooltip {
+    position: absolute;
+    z-index: 2000;
+    max-width: min(420px, calc(100vw - 24px));
+    max-height: min(320px, calc(100vh - 24px));
+    overflow-y: auto;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: color-mix(in srgb, var(--bg-card) 96%, black 4%);
+    color: var(--text);
+    box-shadow: var(--shadow-md);
+    pointer-events: auto;
+}
+
+.chart-tooltip.hidden {
+    display: none;
+}
+
+.chart-tooltip-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 0;
+}
+
+.chart-tooltip-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    position: sticky;
+    top: -10px;
+    z-index: 1;
+    margin: -10px 0 6px;
+    padding: 10px 0 6px;
+    background: color-mix(in srgb, var(--bg-card) 96%, black 4%);
+    border-bottom: 1px solid var(--border);
+}
+
+.chart-tooltip-pin-wrap {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.chart-tooltip-pin-state {
+    font-size: 10px;
+    line-height: 1;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: .04em;
+}
+
+.chart-tooltip-pin {
+    width: 20px;
+    height: 20px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--bg);
+    color: var(--text-muted);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.chart-tooltip-pin:hover {
+    color: var(--text);
+}
+
+.chart-tooltip-pin svg {
+    width: 12px;
+    height: 12px;
+    fill: currentColor;
+}
+
+.chart-tooltip-pin.is-pinned {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.chart-tooltip-pin.is-unpinned {
+    border-color: var(--border);
+}
+
+.chart-tooltip-line {
+    font-size: 12px;
+    line-height: 1.4;
+    color: var(--text);
+    white-space: pre-wrap;
+}
+
+.chart-tooltip-group {
+    margin-bottom: 2px;
+}
+
+.chart-tooltip-group-system {
+    margin-bottom: 8px;
+}
+
+.chart-tooltip-separator {
+    height: 1px;
+    background: var(--border);
+    margin: 6px 0;
+}
+
+.chart-tooltip-line-system-title {
+    font-weight: 700;
+    margin-top: 1px;
+}
+
+.chart-tooltip-line-system-subtitle {
+    font-weight: 400;
+    font-style: italic;
+}
+
+.chart-tooltip-line-system-description {
+    font-weight: 400;
+}
+
+.chart-tooltip-line-detail {
+    padding-left: 12px;
 }
 
 /* ── Files panel ─────────────────────────────────────────────────────────── */

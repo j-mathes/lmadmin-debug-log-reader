@@ -24,29 +24,34 @@ An interactive, browser-based GUI requiring no installation or server.
   - **Consolidated** (default) — one series per user/computer, with the Features panel acting as a count filter
   - **By Feature** — series become individual features; the legend Series section becomes a Users/Computers filter so you can see exactly which features each user or computer checked out; each feature in the Features panel shows a colour swatch matching its chart series (grey swatch for features outside the current top-N)
 - **Horizontal scroll** — when enabled the chart expands to show every date label; configurable minimum pixels per label
-- **Summary cards** — instant totals for checkouts, unique features, users, computers, denials, and expired features
+- **Summary cards** — instant totals for checkouts, unique features, users, computers, denials, expired features, and vendor-daemon exits
 - **Date range filter** — zoom into any time period without reloading
 - **Left panel — three real-time filter sections** (all changes apply instantly, no Apply button needed):
-  - **Action** — independently toggle Checkouts, Denied, Unsupported, and Expired events; All / None buttons
+  - **Action** — independently toggle Checkouts, Denied, Unsupported, Warnings, Expired, Daemon Exits, and Lost Comm events; All / None buttons
   - **Series** — click any series to show/hide it on the chart; All / None buttons (in By Feature mode this becomes a Users/Computers filter)
   - **Features** — per-feature sub-filter (visible in User and Computer views); All / None buttons; expands dynamically from the bottom; filter panel stays visible when all items are deselected so you can re-select without losing context
-- **Seven report types** (Report tab):
+- **Eight report types** (Report tab):
   - Feature Usage by Date *(matches original Python output)*
   - User Summary
   - Computer Summary
   - Feature Totals — sortable all-time table
-  - Denial, Unsupported & Expired Report
+  - Denial, Warning, Unsupported & Expired Report
+  - Vendor Daemon Exit Events
   - Top Users by Checkout
   - Top Features by Checkout
   - **All Reports (Combined View)** — displays every report in one scrollable output
 - **Export format** — choose **Plain Text (.txt)** or **Markdown (.md)** before generating or exporting
+- **Rich external tooltip** — scrollable tooltip content with optional zero-value hiding; in Click to Pin mode, a pin icon and tiny Pinned/Unpinned indicator appear in the tooltip header
 - **Export** — save any report to a file; "All Reports" triggers a separate download per type; export the chart via **File → Export Chart…** in PNG, JPEG, or SVG — SVG is true vector (scalable, editable in Inkscape/Illustrator); all formats include the full chart width (including any horizontally scrolled-off area) and the legend panel
 - **Settings** (Settings tab):
   - Vendor daemon name (default: `geoslope`)
-  - Feature prefix filter (default: `pkc_`)
+  - Feature prefix filter (default: `pkc_`) with an enable/disable toggle for vendors that do not use a consistent prefix
   - Light / dark theme
   - Customisable chart colour palette — configurable number of colours; add or remove swatches individually
   - Default chart type and Top N
+  - Default visibility toggles for Warnings, Expired, Daemon Exits, and Lost Comm in the dashboard chart
+  - Tooltip options: hide zero-value entries, interaction mode (Hover to Lock or Click to Pin), sticky-delay duration, and a pin-state indicator when using Click to Pin
+  - Summary-card value font size (px) for all top dashboard cards, with a smaller default so full date ranges fit more reliably
   - Horizontal scroll on/off and minimum pixels per date label
   - Settings persisted to `localStorage`; importable/exportable as JSON
 
@@ -78,7 +83,7 @@ sample_logs/        ← place test log files here (not tracked by git)
 Same formats as the Python script:
 - `Start-Date: Mon Jan 15 2025 09:30:15 W. Pacific Standard Time`
 - `Time: Mon Jan 15 2025 09:30:15 W. Pacific Standard Time`
-- `TIMESTAMP 01/15/2025`
+- `TIMESTAMP 01/15/2025` (also supports single-digit month/day, e.g. `TIMESTAMP 2/7/2013`)
 
 ---
 
@@ -117,9 +122,13 @@ The script recognizes these date patterns in log files:
 
 The parser recognizes these action entries:
 - `OUT`, `IN`, `DENIED`, `UNSUPPORTED`
-- `EXPIRED:` (with colon)
+- `Warning: <feature> expires <date>`
+- `EXPIRED:`
+- `EXITING DUE TO SIGNAL <signal> Exit reason <reason>`
+- `Lost communications with lmgrd.`
 
 For `EXPIRED:` lines, repeated entries for the same feature at the same timestamp are collapsed into a single reported event.
+For vendor-daemon shutdown lines, the web viewer recognizes these signal/exit-reason mappings and records them as separate daemon-exit timeline events: `25/2`, `27/4`, `28/5`, `32/9`, `51/28`, and `65/42`.
 
 ### Vendor Daemon Configuration
 

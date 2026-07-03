@@ -72,6 +72,10 @@
             <div class="card-label">Expired</div>
         </div>
         <div class="card">
+            <div class="card-value" id="stat-daemon-exits">&#8212;</div>
+            <div class="card-label">Daemon Exits</div>
+        </div>
+        <div class="card">
             <div class="card-value" id="stat-range">&#8212;</div>
             <div class="card-label">Date Range</div>
         </div>
@@ -153,7 +157,8 @@
                 <option value="user-summary">User Summary</option>
                 <option value="computer-summary">Computer Summary</option>
                 <option value="feature-totals">Feature Totals (All Time)</option>
-                <option value="denial-report">Denial, Unsupported &amp; Expired Report</option>
+                <option value="denial-report">Denial, Warning, Unsupported &amp; Expired Report</option>
+                <option value="daemon-events">Vendor Daemon Exit Events</option>
                 <option value="top-users">Top Users by Checkout</option>
                 <option value="top-features">Top Features by Checkout</option>
                 <option value="all" style="font-weight:600">All Reports (Combined View)</option>
@@ -187,6 +192,16 @@
                     Changing this requires reloading log files.</small>
                 </div>
                 <input type="text" id="s-vendor" class="sinput" value="geoslope" spellcheck="false">
+            </div>
+            <div class="srow">
+                <div class="slabel">
+                    <label for="s-use-prefix">Use Feature Prefix Filter</label>
+                    <small>Enable this to limit features to names starting with the configured prefix.</small>
+                </div>
+                <select id="s-use-prefix" class="sinput">
+                    <option value="true">Enabled</option>
+                    <option value="false">Disabled</option>
+                </select>
             </div>
             <div class="srow">
                 <div class="slabel">
@@ -259,6 +274,68 @@
                     <small>Minimum horizontal space (px) per date label when scroll is enabled. Increase for more spacing.</small>
                 </div>
                 <input type="number" id="s-chart-min-col-width" class="sinput" min="10" max="200" step="5" value="40">
+            </div>
+            <div class="srow">
+                <div class="slabel"><label for="s-show-daemon-exits">Show Daemon Exits by Default</label></div>
+                <select id="s-show-daemon-exits" class="sinput">
+                    <option value="true">Enabled</option>
+                    <option value="false">Disabled</option>
+                </select>
+            </div>
+            <div class="srow">
+                <div class="slabel"><label for="s-show-lost-comm">Show Lost Comm by Default</label></div>
+                <select id="s-show-lost-comm" class="sinput">
+                    <option value="true">Enabled</option>
+                    <option value="false">Disabled</option>
+                </select>
+            </div>
+            <div class="srow">
+                <div class="slabel"><label for="s-show-warnings">Show Warnings by Default</label></div>
+                <select id="s-show-warnings" class="sinput">
+                    <option value="true">Enabled</option>
+                    <option value="false">Disabled</option>
+                </select>
+            </div>
+            <div class="srow">
+                <div class="slabel"><label for="s-show-expired">Show Expired by Default</label></div>
+                <select id="s-show-expired" class="sinput">
+                    <option value="true">Enabled</option>
+                    <option value="false">Disabled</option>
+                </select>
+            </div>
+            <div class="srow">
+                <div class="slabel">
+                    <label for="s-hide-zero-tooltip">Hide Zero-Value Series in Tooltip</label>
+                    <small>When enabled, tooltip entries with a zero count are omitted.</small>
+                </div>
+                <select id="s-hide-zero-tooltip" class="sinput">
+                    <option value="true">Enabled</option>
+                    <option value="false">Disabled</option>
+                </select>
+            </div>
+            <div class="srow">
+                <div class="slabel">
+                    <label for="s-tooltip-mode">Tooltip Interaction Mode</label>
+                    <small>Choose whether the tooltip locks when hovered or stays open after clicking a data point.</small>
+                </div>
+                <select id="s-tooltip-mode" class="sinput">
+                    <option value="hover-lock">Hover to Lock</option>
+                    <option value="click-pin">Click to Pin</option>
+                </select>
+            </div>
+            <div class="srow">
+                <div class="slabel">
+                    <label for="s-tooltip-delay">Tooltip Sticky Delay (ms)</label>
+                    <small>Delay before the tooltip hides after leaving a data point.</small>
+                </div>
+                <input type="number" id="s-tooltip-delay" class="sinput" min="0" max="5000" step="10" value="180">
+            </div>
+            <div class="srow">
+                <div class="slabel">
+                    <label for="s-summary-font-size">Summary Card Value Font Size (px)</label>
+                    <small>Controls the value text size for all summary cards at the top of the Dashboard.</small>
+                </div>
+                <input type="number" id="s-summary-font-size" class="sinput" min="12" max="40" step="1" value="20">
             </div>
         </section>
 

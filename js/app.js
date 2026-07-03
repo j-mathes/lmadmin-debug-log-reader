@@ -13,6 +13,7 @@
 // ── Defaults ─────────────────────────────────────────────────────────────────
 const DEFAULTS = {
     vendorDaemon     : 'geoslope',
+    useFeaturePrefix : true,
     featurePrefix    : 'pkc_',
     theme            : 'light',
     chartType        : 'line',
@@ -20,6 +21,14 @@ const DEFAULTS = {
     topN             : 10,
     chartScroll      : true,
     chartMinColWidth : 40,
+    showDaemonExits  : false,
+    showLostComm     : false,
+    showWarnings     : false,
+    showExpired      : true,
+    hideZeroTooltipEntries: true,
+    tooltipInteractionMode: 'hover-lock',
+    tooltipStickyDelayMs: 180,
+    summaryCardValueFontSizePx: 20,
     colors: [
         '#4e79a7','#f28e2b','#e15759','#76b7b2','#59a14f',
         '#edc948','#b07aa1','#ff9da7','#9c755f','#bab0ac',
@@ -36,10 +45,317 @@ const State = {
     loaded  : [],   // { name, count } — display list of loaded files
     settings: { ...DEFAULTS },
     chart   : null,
+    tooltipLocked: false,
+    tooltipHideTimer: null,
+    tooltipPinned: false,
 };
 
 // ── DOM helper ────────────────────────────────────────────────────────────────
 const el = id => document.getElementById(id);
+const LABEL_SORTER = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+
+function getSummaryCardValueFontSizePx() {
+    const fallback = State.settings.dateRangeFontSizePx ?? DEFAULTS.summaryCardValueFontSizePx;
+    const raw = Number.parseInt(State.settings.summaryCardValueFontSizePx ?? fallback, 10);
+    if (Number.isNaN(raw)) return DEFAULTS.summaryCardValueFontSizePx;
+    return Math.max(12, Math.min(40, raw));
+}
+
+function applySummaryCardValueFontSize() {
+    document.documentElement.style.setProperty('--summary-card-value-font-size', `${getSummaryCardValueFontSizePx()}px`);
+}
+
+function updateTooltipPinButtonState() {
+    const tooltipEl = document.getElementById('chart-tooltip');
+    const pinButton = tooltipEl?.querySelector('.chart-tooltip-pin');
+    const pinStateLabel = tooltipEl?.querySelector('.chart-tooltip-pin-state');
+    if (!pinButton) return;
+
+    pinButton.classList.toggle('is-pinned', State.tooltipPinned);
+    pinButton.classList.toggle('is-unpinned', !State.tooltipPinned);
+    pinButton.title = State.tooltipPinned ? 'Pinned' : 'Unpinned';
+    pinButton.setAttribute('aria-label', State.tooltipPinned ? 'Pinned' : 'Unpinned');
+    if (pinStateLabel) pinStateLabel.textContent = State.tooltipPinned ? 'Pinned' : 'Unpinned';
+}
+
+function compareLabels(left, right) {
+    return LABEL_SORTER.compare(String(left ?? ''), String(right ?? ''));
+}
+
+function isSystemSeriesLabel(label) {
+    const text = String(label ?? '');
+    return text === 'Lost Comm' || /^Signal\s+\d+\s*\/\s*Exit\s+\d+$/i.test(text);
+}
+
+function isDaemonExitEvent(event) {
+    return event.action === 'DAEMON_EXIT' || event.category === 'daemon-exit';
+}
+
+function isLostCommEvent(event) {
+    return event.action === 'LOST_COMM' || event.category === 'lost-comm';
+}
+
+function isWarningEvent(event) {
+    return event.action === 'WARNING' || event.category === 'warning';
+}
+
+function passesFeaturePrefix(event, prefix) {
+    return isDaemonExitEvent(event)
+        || isLostCommEvent(event)
+        || !State.settings.useFeaturePrefix
+        || !prefix
+        || event.feature.startsWith(prefix);
+}
+
+function getReportEvents() {
+    const pfx = State.settings.featurePrefix;
+    return State.events.filter(event => passesFeaturePrefix(event, pfx));
+}
+
+function getDefaultActionState() {
+    return {
+        out: true,
+        denied: true,
+        unsupported: true,
+        warning: State.settings.showWarnings,
+        expired: State.settings.showExpired,
+        daemonExit: State.settings.showDaemonExits,
+        lostComm: State.settings.showLostComm,
+    };
+}
+
+function ensureChartTooltip() {
+    let tooltip = document.getElementById('chart-tooltip');
+    if (tooltip) return tooltip;
+
+    tooltip = document.createElement('div');
+    tooltip.id = 'chart-tooltip';
+    tooltip.className = 'chart-tooltip hidden';
+    tooltip.addEventListener('mouseenter', () => {
+        if (State.settings.tooltipInteractionMode === 'hover-lock') {
+            State.tooltipLocked = true;
+        }
+        clearTimeout(State.tooltipHideTimer);
+    });
+    tooltip.addEventListener('mouseleave', () => {
+        if (State.settings.tooltipInteractionMode === 'hover-lock') {
+            State.tooltipLocked = false;
+            hideChartTooltip(true);
+        }
+    });
+    tooltip.addEventListener('click', event => {
+        if (State.settings.tooltipInteractionMode !== 'click-pin') return;
+        const pinButton = event.target.closest('.chart-tooltip-pin');
+        if (!pinButton) return;
+        event.stopPropagation();
+        State.tooltipPinned = !State.tooltipPinned;
+        State.tooltipLocked = false;
+        clearTimeout(State.tooltipHideTimer);
+        updateTooltipPinButtonState();
+    });
+    document.body.appendChild(tooltip);
+    return tooltip;
+}
+
+function hideChartTooltip(force = false) {
+    const tooltipEl = ensureChartTooltip();
+    clearTimeout(State.tooltipHideTimer);
+    if (!force && (State.tooltipPinned || State.tooltipLocked)) return;
+    if (force) {
+        State.tooltipPinned = false;
+        State.tooltipLocked = false;
+        tooltipEl.classList.add('hidden');
+        updateTooltipPinButtonState();
+        return;
+    }
+    State.tooltipHideTimer = setTimeout(() => {
+        if (!State.tooltipLocked && !State.tooltipPinned) tooltipEl.classList.add('hidden');
+    }, State.settings.tooltipStickyDelayMs);
+}
+
+function renderExternalTooltip(context) {
+    const { chart, tooltip } = context;
+    const tooltipEl = ensureChartTooltip();
+
+    if (!tooltip || tooltip.opacity === 0 || !tooltip.dataPoints?.length) {
+        hideChartTooltip();
+        return;
+    }
+
+    clearTimeout(State.tooltipHideTimer);
+    if (State.tooltipLocked || State.tooltipPinned) {
+        return;
+    }
+
+    const titleLines = tooltip.title || [];
+    const bodyGroups = (tooltip.body || []).map(item => item.lines || []);
+    const points = tooltip.dataPoints || [];
+    const groupedLines = bodyGroups.map((lines, idx) => ({
+        lines,
+        isSystem: Boolean(points[idx]?.dataset?.isSystemGroup) || isSystemSeriesLabel(points[idx]?.dataset?.label),
+    }));
+
+    const systemGroups = groupedLines.filter(group => group.isSystem);
+    const regularGroups = groupedLines.filter(group => !group.isSystem);
+    const orderedGroups = systemGroups.concat(regularGroups);
+
+    tooltipEl.innerHTML = '';
+
+    const header = document.createElement('div');
+    header.className = 'chart-tooltip-header';
+
+    if (titleLines.length) {
+        const title = document.createElement('div');
+        title.className = 'chart-tooltip-title';
+        title.textContent = titleLines.join(' ');
+        header.appendChild(title);
+    }
+
+    if (State.settings.tooltipInteractionMode === 'click-pin') {
+        const pinWrap = document.createElement('div');
+        pinWrap.className = 'chart-tooltip-pin-wrap';
+
+        const pinButton = document.createElement('button');
+        pinButton.type = 'button';
+        pinButton.className = 'chart-tooltip-pin';
+        pinButton.innerHTML =
+            '<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">' +
+            '<path d="M10.5 1.5a1 1 0 0 1 1 1v1.47l1.29 1.29a1 1 0 0 1-.7 1.71H9.5v2.26l2.12 2.12a.75.75 0 1 1-1.06 1.06L8.44 10.3l-2.56 4.69a.75.75 0 1 1-1.32-.72l2.6-4.76H3.91a1 1 0 0 1-.7-1.71L4.5 6.51V2.5a1 1 0 0 1 1-1h5z"/></svg>';
+
+        const pinStateLabel = document.createElement('span');
+        pinStateLabel.className = 'chart-tooltip-pin-state';
+        pinStateLabel.textContent = State.tooltipPinned ? 'Pinned' : 'Unpinned';
+
+        pinWrap.appendChild(pinStateLabel);
+        pinWrap.appendChild(pinButton);
+        header.appendChild(pinWrap);
+    }
+
+    if (header.children.length) tooltipEl.appendChild(header);
+
+    orderedGroups.forEach((group, idx) => {
+        if (idx === systemGroups.length && systemGroups.length && regularGroups.length) {
+            const divider = document.createElement('div');
+            divider.className = 'chart-tooltip-separator';
+            tooltipEl.appendChild(divider);
+        }
+        const groupWrap = document.createElement('div');
+        groupWrap.className = 'chart-tooltip-group';
+        if (group.isSystem) groupWrap.classList.add('chart-tooltip-group-system');
+        group.lines.forEach((line, lineIndex) => {
+            const row = document.createElement('div');
+            row.className = 'chart-tooltip-line';
+            const isDetailLine = /^\s+/.test(line);
+            if (isDetailLine) row.classList.add('chart-tooltip-line-detail');
+            row.textContent = isDetailLine ? line.trimStart() : line;
+            if (group.isSystem) {
+                if (lineIndex === 0) {
+                    row.classList.add('chart-tooltip-line-system-title');
+                } else if (lineIndex === 1) {
+                    row.classList.add('chart-tooltip-line-system-subtitle');
+                } else {
+                    row.classList.add('chart-tooltip-line-system-description');
+                }
+            }
+            groupWrap.appendChild(row);
+        });
+        tooltipEl.appendChild(groupWrap);
+    });
+
+    const rect = chart.canvas.getBoundingClientRect();
+    tooltipEl.style.left = `${rect.left + window.scrollX + tooltip.caretX + 14}px`;
+    tooltipEl.style.top = `${rect.top + window.scrollY + tooltip.caretY + 14}px`;
+    tooltipEl.classList.remove('hidden');
+
+    const tipRect = tooltipEl.getBoundingClientRect();
+    let left = rect.left + window.scrollX + tooltip.caretX + 14;
+    let top = rect.top + window.scrollY + tooltip.caretY + 14;
+
+    if (tipRect.right > window.scrollX + window.innerWidth - 12) {
+        left = rect.left + window.scrollX + tooltip.caretX - tipRect.width - 14;
+    }
+    if (tipRect.bottom > window.scrollY + window.innerHeight - 12) {
+        top = rect.top + window.scrollY + tooltip.caretY - tipRect.height - 14;
+    }
+
+    tooltipEl.style.left = `${Math.max(window.scrollX + 12, left)}px`;
+    tooltipEl.style.top = `${Math.max(window.scrollY + 12, top)}px`;
+    updateTooltipPinButtonState();
+}
+
+function isActionEnabled(id, defaultValue) {
+    const checkbox = el(id);
+    return checkbox ? checkbox.checked : defaultValue;
+}
+
+function bindImmediateRerender(checkbox) {
+    const rerender = () => {
+        hideChartTooltip(true);
+        renderChart();
+    };
+    checkbox.addEventListener('input', rerender);
+    checkbox.addEventListener('change', rerender);
+}
+
+function bindTooltipInteractionHandlers() {
+    const canvas = el('main-chart');
+    if (!canvas || canvas.dataset.tooltipBound === 'true') return;
+    canvas.dataset.tooltipBound = 'true';
+
+    canvas.addEventListener('click', event => {
+        if (State.settings.tooltipInteractionMode !== 'click-pin') return;
+        if (!State.chart) return;
+
+        const points = State.chart.getElementsAtEventForMode(
+            event,
+            'index',
+            { intersect: false },
+            false
+        );
+
+        if (points.length) {
+            State.tooltipPinned = !State.tooltipPinned;
+            State.tooltipLocked = false;
+            updateTooltipPinButtonState();
+            return;
+        }
+
+        hideChartTooltip(true);
+    });
+
+    document.addEventListener('click', event => {
+        const tooltip = document.getElementById('chart-tooltip');
+        if (!tooltip || tooltip.classList.contains('hidden')) return;
+        if (event.target === canvas || canvas.contains(event.target) || tooltip.contains(event.target)) return;
+        hideChartTooltip(true);
+    });
+}
+
+function buildTooltipLines(group, total, details) {
+    const lines = [` ${group}: ${total}`];
+    if (!details.length) return lines;
+
+    const daemonEvent = details.find(isDaemonExitEvent);
+    if (daemonEvent) {
+        if (daemonEvent.title) lines.push(`   ${daemonEvent.title}`);
+        if (daemonEvent.explanation) lines.push(`   ${daemonEvent.explanation}`);
+        return lines;
+    }
+
+    const lostCommEvent = details.find(isLostCommEvent);
+    if (lostCommEvent) {
+        if (lostCommEvent.title) lines.push(`   ${lostCommEvent.title}`);
+        if (lostCommEvent.explanation) lines.push(`   ${lostCommEvent.explanation}`);
+        return lines;
+    }
+
+    const warningEvent = details.find(isWarningEvent);
+    if (warningEvent?.warningExpiresOn) {
+        lines.push(`   Expires: ${warningEvent.warningExpiresOn}`);
+    }
+
+    return lines;
+}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Settings
@@ -59,6 +375,7 @@ const Settings = {
 
     readFromUI() {
         State.settings.vendorDaemon  = el('s-vendor').value.trim()  || DEFAULTS.vendorDaemon;
+        State.settings.useFeaturePrefix = el('s-use-prefix').value === 'true';
         State.settings.featurePrefix = el('s-prefix').value.trim();
         State.settings.theme         = el('s-theme').value;
         State.settings.chartType        = el('s-chart-type').value;
@@ -67,6 +384,14 @@ const Settings = {
         State.settings.topN             = Number.isNaN(rawN) ? 10 : rawN;
         State.settings.chartScroll      = el('s-chart-scroll').value === 'true';
         State.settings.chartMinColWidth = parseInt(el('s-chart-min-col-width').value, 10) || 40;
+        State.settings.showDaemonExits  = el('s-show-daemon-exits').value === 'true';
+        State.settings.showLostComm     = el('s-show-lost-comm').value === 'true';
+        State.settings.showWarnings     = el('s-show-warnings').value === 'true';
+        State.settings.showExpired      = el('s-show-expired').value === 'true';
+        State.settings.hideZeroTooltipEntries = el('s-hide-zero-tooltip').value === 'true';
+        State.settings.tooltipInteractionMode = el('s-tooltip-mode').value;
+        State.settings.tooltipStickyDelayMs = parseInt(el('s-tooltip-delay').value, 10) || DEFAULTS.tooltipStickyDelayMs;
+        State.settings.summaryCardValueFontSizePx = parseInt(el('s-summary-font-size').value, 10) || DEFAULTS.summaryCardValueFontSizePx;
         State.settings.colors        = Array.from(
             document.querySelectorAll('#color-palette input[type="color"]')
         ).map(i => i.value);
@@ -75,6 +400,7 @@ const Settings = {
     _applyToUI() {
         document.body.className     = `theme-${State.settings.theme}`;
         el('s-vendor').value        = State.settings.vendorDaemon;
+        el('s-use-prefix').value    = String(State.settings.useFeaturePrefix);
         el('s-prefix').value        = State.settings.featurePrefix;
         el('s-theme').value         = State.settings.theme;
         el('s-chart-type').value         = State.settings.chartType;
@@ -82,11 +408,26 @@ const Settings = {
         el('s-top-n').value              = String(State.settings.topN);
         el('s-chart-scroll').value       = String(State.settings.chartScroll);
         el('s-chart-min-col-width').value = String(State.settings.chartMinColWidth);
+        el('s-show-daemon-exits').value = String(State.settings.showDaemonExits);
+        el('s-show-lost-comm').value    = String(State.settings.showLostComm);
+        el('s-show-warnings').value     = String(State.settings.showWarnings);
+        el('s-show-expired').value      = String(State.settings.showExpired);
+        el('s-hide-zero-tooltip').value = String(State.settings.hideZeroTooltipEntries);
+        el('s-tooltip-mode').value      = State.settings.tooltipInteractionMode;
+        el('s-tooltip-delay').value     = String(State.settings.tooltipStickyDelayMs);
+        el('s-summary-font-size').value = String(getSummaryCardValueFontSizePx());
+        applySummaryCardValueFontSize();
+        this._updatePrefixInputState();
         // Sync chart toolbar defaults
         el('view-by').value         = State.settings.viewBy;
         el('chart-type').value      = State.settings.chartType;
         el('top-n').value           = String(State.settings.topN);
         this._renderPalette();
+    },
+
+    _updatePrefixInputState() {
+        const enabled = el('s-use-prefix').value === 'true';
+        el('s-prefix').disabled = !enabled;
     },
 
     _renderPalette() {
@@ -219,17 +560,16 @@ function refreshAll() {
 
 function updateStats() {
     const pfx  = State.settings.featurePrefix;
-    const evts = pfx
-        ? State.events.filter(e => e.feature.startsWith(pfx))
-        : State.events;
+    const usageEvents = State.events.filter(e => !isDaemonExitEvent(e) && passesFeaturePrefix(e, pfx));
+    const daemonEvents = State.events.filter(isDaemonExitEvent);
 
-    const out       = evts.filter(e => e.action === 'OUT');
-    const features  = new Set(evts.map(e => e.feature));
+    const out       = usageEvents.filter(e => e.action === 'OUT');
+    const features  = new Set(usageEvents.map(e => e.feature));
     const users     = new Set(out.map(e => e.user));
     const computers = new Set(out.map(e => e.computer));
-    const denied    = evts.filter(e => e.action === 'DENIED');
-    const expired   = evts.filter(e => e.action === 'EXPIRED');
-    const dates     = [...new Set(evts.map(e => e.date))].sort();
+    const denied    = usageEvents.filter(e => e.action === 'DENIED');
+    const expired   = usageEvents.filter(e => e.action === 'EXPIRED');
+    const dates     = [...new Set(State.events.map(e => e.date))].sort();
 
     el('stat-checkouts').textContent = out.length.toLocaleString();
     el('stat-features').textContent  = features.size;
@@ -238,6 +578,9 @@ function updateStats() {
     el('stat-denied').textContent    = denied.length.toLocaleString();
     if (el('stat-expired')) {
         el('stat-expired').textContent = expired.length.toLocaleString();
+    }
+    if (el('stat-daemon-exits')) {
+        el('stat-daemon-exits').textContent = daemonEvents.length.toLocaleString();
     }
 
     if (dates.length > 0) {
@@ -291,10 +634,14 @@ function setDateRangeFromData() {
 // ═══════════════════════════════════════════════════════════════════════════════
 function getChartEvents() {
     const actions = new Set();
-    if (el('act-out')?.checked !== false)         actions.add('OUT');
-    if (el('act-denied')?.checked !== false)      actions.add('DENIED');
-    if (el('act-unsupported')?.checked !== false) actions.add('UNSUPPORTED');
-    if (el('act-expired')?.checked !== false)     actions.add('EXPIRED');
+    const defaults = getDefaultActionState();
+    if (isActionEnabled('act-out', defaults.out))                 actions.add('OUT');
+    if (isActionEnabled('act-denied', defaults.denied))           actions.add('DENIED');
+    if (isActionEnabled('act-unsupported', defaults.unsupported)) actions.add('UNSUPPORTED');
+    if (isActionEnabled('act-warning', defaults.warning))         actions.add('WARNING');
+    if (isActionEnabled('act-expired', defaults.expired))         actions.add('EXPIRED');
+    if (isActionEnabled('act-daemon-exit', defaults.daemonExit))  actions.add('DAEMON_EXIT');
+    if (isActionEnabled('act-lost-comm', defaults.lostComm))      actions.add('LOST_COMM');
 
     const from   = el('date-from').value;
     const to     = el('date-to').value;
@@ -326,7 +673,7 @@ function getChartEvents() {
         if (!actions.has(e.action))                              return false;
         if (from && e.date < from)                               return false;
         if (to   && e.date > to)                                 return false;
-        if (pfx  && !e.feature.startsWith(pfx))                 return false;
+        if (!passesFeaturePrefix(e, pfx))                        return false;
         if (activeFeatures && !activeFeatures.has(e.feature))   return false;
         if (activeUC) {
             if (!activeUC.has(viewBy === 'user' ? e.user : e.computer)) return false;
@@ -346,15 +693,31 @@ function buildChartData(events, viewBy, topN) {
         .sort((a, b) => b[1] - a[1])
         .map(([k]) => k);
     if (topN > 0) groups = groups.slice(0, topN);
+    const systemGroups = new Set(
+        events
+            .filter(event => isDaemonExitEvent(event) || isLostCommEvent(event))
+            .map(event => event[viewBy])
+    );
+
+    groups.sort((left, right) => {
+        const leftSystem = systemGroups.has(left);
+        const rightSystem = systemGroups.has(right);
+        if (leftSystem !== rightSystem) return leftSystem ? -1 : 1;
+        return compareLabels(left, right);
+    });
 
     const allDates = [...new Set(events.map(e => e.date))].sort();
 
     // Count per group per date
     const matrix = {};
+    const eventDetails = {};
     for (const g of groups) matrix[g] = {};
     for (const e of events) {
         if (!matrix[e[viewBy]]) continue;
         matrix[e[viewBy]][e.date] = (matrix[e[viewBy]][e.date] || 0) + 1;
+        if (!eventDetails[e.date]) eventDetails[e.date] = {};
+        if (!eventDetails[e.date][e[viewBy]]) eventDetails[e.date][e[viewBy]] = [];
+        eventDetails[e.date][e[viewBy]].push(e);
     }
 
     // Feature breakdown per date+group for tooltip (user/computer views only)
@@ -372,10 +735,11 @@ function buildChartData(events, viewBy, topN) {
 
     const datasets = groups.map(g => ({
         label: g,
-        data : allDates.map(d => matrix[g][d] || 0)
+        data : allDates.map(d => matrix[g][d] || 0),
+        isSystemGroup: systemGroups.has(g)
     }));
 
-    return { labels: allDates, datasets, featureBreakdown };
+    return { labels: allDates, datasets, featureBreakdown, eventDetails };
 }
 
 function renderChart() {
@@ -391,6 +755,7 @@ function renderChart() {
 
     // No files loaded at all
     if (State.events.length === 0) {
+        hideChartTooltip(true);
         emptyMsg.innerHTML = 'Drop log files here or use <strong>File &#9660; &rarr; Load Log File(s)</strong>';
         emptyEl.classList.remove('hidden');
         canvas.style.display = 'none';
@@ -403,13 +768,23 @@ function renderChart() {
     const events = getChartEvents();
 
     if (events.length === 0) {
+        hideChartTooltip(true);
         emptyMsg.textContent = 'No data matches the current filters.';
         emptyEl.classList.remove('hidden');
         canvas.style.display = 'none';
         resetCanvas();
-        destroyChart();
-        // Preserve the legend so the user can re-select filters; only clear it
-        // when there is genuinely no data loaded at all.
+
+        // Keep the action controls visible, but clear stale series by updating
+        // the existing chart instance to an empty dataset and re-rendering legend.
+        if (State.chart) {
+            State.chart.data.labels = [];
+            State.chart.data.datasets = [];
+            State.chart.update();
+            renderLegend();
+        }
+
+        // If no chart exists yet, preserve the existing legend UI so users can
+        // re-select filters without losing context.
         return;
     }
 
@@ -431,13 +806,14 @@ function renderChart() {
     const splitByFeature = isUCView && el('split-feature')?.value === 'split';
     const effectiveViewBy = splitByFeature ? 'feature' : viewBy;
 
-    const { labels, datasets, featureBreakdown } = buildChartData(events, effectiveViewBy, topN);
+    const { labels, datasets, featureBreakdown, eventDetails } = buildChartData(events, effectiveViewBy, topN);
 
     const jsDsets = datasets.map((ds, i) => {
         const hex = State.settings.colors[i % State.settings.colors.length];
         return {
             label          : ds.label,
             data           : ds.data,
+            isSystemGroup  : ds.isSystemGroup,
             borderColor    : hex,
             backgroundColor: jsType === 'line' ? hexAlpha(hex, .12) : hexAlpha(hex, .78),
             borderWidth    : jsType === 'line' ? 2 : 1,
@@ -461,21 +837,27 @@ function renderChart() {
             plugins: {
                 legend: { display: false },
                 tooltip: {
+                    enabled: false,
+                    external: renderExternalTooltip,
+                    position: 'nearest',
+                    filter: ctx => !State.settings.hideZeroTooltipEntries || Number(ctx.raw) !== 0,
                     callbacks: {
                         title: ctx => `Date: ${ctx[0].label}`,
                         label: ctx => {
                             const group = ctx.dataset.label;
                             const total = ctx.raw;
+                            const details = eventDetails[ctx.label]?.[group] || [];
                             if (splitByFeature || viewBy !== 'user' && viewBy !== 'computer') {
-                                return ` ${group}: ${total}`;
+                                return buildTooltipLines(group, total, details);
                             }
                             const bd = featureBreakdown[ctx.label]?.[group];
-                            if (!bd) return ` ${group}: ${total}`;
+                            if (!bd) return buildTooltipLines(group, total, details);
                             const lines = [` ${group}: ${total}`];
                             Object.entries(bd)
                                 .sort((a, b) => b[1] - a[1])
                                 .forEach(([feat, cnt]) => lines.push(`   \u2514 ${feat}: ${cnt}`));
-                            return lines;
+                            const detailLines = buildTooltipLines(group, total, details);
+                            return detailLines.length > 1 ? lines.concat(detailLines.slice(1)) : lines;
                         }
                     }
                 }
@@ -519,18 +901,23 @@ function renderChart() {
     }
 
     State.chart = new Chart(canvas, config);
+    bindTooltipInteractionHandlers();
     renderLegend();
 }
 
 function renderLegend() {
     const panel = el('chart-legend');
+    const defaultActions = getDefaultActionState();
 
     // Capture action state before wiping the panel
     const actState = {
-        out:         el('act-out')?.checked ?? true,
-        denied:      el('act-denied')?.checked ?? true,
-        unsupported: el('act-unsupported')?.checked ?? true,
-        expired:     el('act-expired')?.checked ?? true,
+        out:         el('act-out')?.checked ?? defaultActions.out,
+        denied:      el('act-denied')?.checked ?? defaultActions.denied,
+        unsupported: el('act-unsupported')?.checked ?? defaultActions.unsupported,
+        warning:     el('act-warning')?.checked ?? defaultActions.warning,
+        expired:     el('act-expired')?.checked ?? defaultActions.expired,
+        daemonExit:  el('act-daemon-exit')?.checked ?? defaultActions.daemonExit,
+        lostComm:    el('act-lost-comm')?.checked ?? defaultActions.lostComm,
     };
 
     // Capture feature filter state before wiping the panel
@@ -587,7 +974,10 @@ function renderLegend() {
         { id: 'act-out',         label: 'Checkouts',   key: 'out'         },
         { id: 'act-denied',      label: 'Denied',      key: 'denied'      },
         { id: 'act-unsupported', label: 'Unsupported', key: 'unsupported' },
+        { id: 'act-warning',     label: 'Warnings',    key: 'warning'     },
         { id: 'act-expired',     label: 'Expired',     key: 'expired'     },
+        { id: 'act-daemon-exit', label: 'Daemon Exits', key: 'daemonExit' },
+        { id: 'act-lost-comm',   label: 'Lost Comm',   key: 'lostComm'    },
     ].forEach(({ id, label, key }) => {
         const lbl = document.createElement('label');
         lbl.className = 'legend-check';
@@ -595,7 +985,7 @@ function renderLegend() {
         cb.type    = 'checkbox';
         cb.id      = id;
         cb.checked = actState[key];
-        cb.addEventListener('change', renderChart);
+        bindImmediateRerender(cb);
         lbl.appendChild(cb);
         lbl.appendChild(document.createTextNode(' ' + label));
         actionList.appendChild(lbl);
@@ -627,10 +1017,10 @@ function renderLegend() {
         const ucKey = viewBy === 'user' ? 'user' : 'computer';
         const allUC = [...new Set(
             State.events
-                .filter(e => !pfxUC || e.feature.startsWith(pfxUC))
+                .filter(e => passesFeaturePrefix(e, pfxUC))
                 .map(e => e[ucKey])
         )].sort();
-        allUC.forEach(ucVal => {
+        allUC.sort(compareLabels).forEach(ucVal => {
             const checked = !prevUCAll.has(ucVal) || prevUCChecked.has(ucVal);
             const lbl = document.createElement('label');
             lbl.className = 'legend-check';
@@ -638,7 +1028,7 @@ function renderLegend() {
             cb.type    = 'checkbox';
             cb.value   = ucVal;
             cb.checked = checked;
-            cb.addEventListener('change', renderChart);
+            bindImmediateRerender(cb);
             lbl.appendChild(cb);
             lbl.appendChild(document.createTextNode(' ' + ucVal));
             seriesList.appendChild(lbl);
@@ -650,7 +1040,26 @@ function renderLegend() {
         ));
     } else {
         // Normal mode: click to show/hide each dataset
-        State.chart.data.datasets.forEach((ds, i) => {
+        const sortedDatasets = State.chart.data.datasets
+            .map((ds, i) => ({ ds, i }))
+            .sort((a, b) => {
+                const aSystem = Boolean(a.ds.isSystemGroup) || isSystemSeriesLabel(a.ds.label);
+                const bSystem = Boolean(b.ds.isSystemGroup) || isSystemSeriesLabel(b.ds.label);
+                if (aSystem !== bSystem) return aSystem ? -1 : 1;
+                return compareLabels(a.ds.label, b.ds.label);
+            });
+
+        const firstRegularIdx = sortedDatasets.findIndex(({ ds }) =>
+            !(Boolean(ds.isSystemGroup) || isSystemSeriesLabel(ds.label))
+        );
+
+        sortedDatasets
+            .forEach(({ ds, i }, orderedIndex) => {
+            if (orderedIndex === firstRegularIdx && firstRegularIdx > 0) {
+                const divider = document.createElement('div');
+                divider.className = 'legend-inline-divider';
+                seriesList.appendChild(divider);
+            }
             const item = document.createElement('div');
             item.className = 'legend-item';
             if (!State.chart.isDatasetVisible(i)) item.classList.add('series-hidden');
@@ -709,9 +1118,9 @@ function renderLegend() {
         const pfx = State.settings.featurePrefix;
         const features = [...new Set(
             State.events
-                .filter(e => !pfx || e.feature.startsWith(pfx))
+                .filter(e => passesFeaturePrefix(e, pfx))
                 .map(e => e.feature)
-        )].sort();
+        )].sort(compareLabels);
 
         // In split mode the features are the chart series — map name → color for swatches
         const featColorMap = {};
@@ -727,7 +1136,7 @@ function renderLegend() {
             cb.type = 'checkbox';
             cb.value = feat;
             cb.checked = checked;
-            cb.addEventListener('change', renderChart);
+            bindImmediateRerender(cb);
             lbl.appendChild(cb);
             if (splitByFeature) {
                 const sw = document.createElement('span');
@@ -760,10 +1169,7 @@ function destroyChart() {
 function generateReport() {
     const type      = el('report-type').value;
     const format    = el('export-format').value;
-    const pfx       = State.settings.featurePrefix;
-    const events    = pfx
-        ? State.events.filter(e => e.feature.startsWith(pfx))
-        : State.events;
+    const events    = getReportEvents();
     const sourceStr = State.loaded.map(f => f.name).join(', ') || 'No files loaded';
     el('report-out').textContent = Reports.generate(type, events, sourceStr, format);
 }
@@ -776,10 +1182,7 @@ function exportReport() {
 
     if (type === 'all') {
         if (State.events.length === 0) { toast('No data loaded.'); return; }
-        const pfx       = State.settings.featurePrefix;
-        const events    = pfx
-            ? State.events.filter(e => e.feature.startsWith(pfx))
-            : State.events;
+        const events    = getReportEvents();
         const sourceStr = State.loaded.map(f => f.name).join(', ') || 'No files loaded';
         // Stagger downloads 350 ms apart — simultaneous triggers get blocked by browsers.
         Reports.TYPES.forEach(({ key }, i) =>
@@ -862,7 +1265,7 @@ function exportChart(format) {
 
         const featCbs = [...document.querySelectorAll('#feature-filter-checks input')];
         const hasFeat = featCbs.length > 0;
-        const legendH = 4 + HDR_H + 4*LINE_H + DIV_H
+        const legendH = 4 + HDR_H + 7*LINE_H + DIV_H
             + HDR_H + State.chart.data.datasets.length * LINE_H
             + (hasFeat ? DIV_H + HDR_H + featCbs.length * LINE_H : 0) + 8;
 
@@ -902,7 +1305,10 @@ function exportChart(format) {
         checkRow('Checkouts',   el('act-out')?.checked         ?? true);
         checkRow('Denied',      el('act-denied')?.checked      ?? true);
         checkRow('Unsupported', el('act-unsupported')?.checked ?? true);
-        checkRow('Expired',     el('act-expired')?.checked     ?? true);
+        checkRow('Warnings',    el('act-warning')?.checked     ?? State.settings.showWarnings);
+        checkRow('Expired',     el('act-expired')?.checked     ?? State.settings.showExpired);
+        checkRow('Daemon Exits', el('act-daemon-exit')?.checked ?? State.settings.showDaemonExits);
+        checkRow('Lost Comm',   el('act-lost-comm')?.checked   ?? State.settings.showLostComm);
         divLine();
         secTitle('Series');
         State.chart.data.datasets.forEach((ds, i) => {
@@ -961,7 +1367,7 @@ function buildVectorSVG() {
 
     const featCbs = [...document.querySelectorAll('#feature-filter-checks input')];
     const hasFeat = featCbs.length > 0;
-    const legendH = 4 + HDR_H + 4*LINE_H + DIV_H
+    const legendH = 4 + HDR_H + 7*LINE_H + DIV_H
         + HDR_H + chart.data.datasets.length * LINE_H
         + (hasFeat ? DIV_H + HDR_H + featCbs.length * LINE_H : 0) + 8;
 
@@ -1001,7 +1407,10 @@ function buildVectorSVG() {
     lgCheck('Checkouts',   el('act-out')?.checked         ?? true);
     lgCheck('Denied',      el('act-denied')?.checked      ?? true);
     lgCheck('Unsupported', el('act-unsupported')?.checked ?? true);
-    lgCheck('Expired',     el('act-expired')?.checked     ?? true);
+    lgCheck('Warnings',    el('act-warning')?.checked     ?? State.settings.showWarnings);
+    lgCheck('Expired',     el('act-expired')?.checked     ?? State.settings.showExpired);
+    lgCheck('Daemon Exits', el('act-daemon-exit')?.checked ?? State.settings.showDaemonExits);
+    lgCheck('Lost Comm',   el('act-lost-comm')?.checked   ?? State.settings.showLostComm);
     lgDiv();
 
     lgTitle('Series');
@@ -1212,10 +1621,14 @@ function initListeners() {
     el('apply-btn').addEventListener('click', renderChart);
     el('split-feature').addEventListener('change', renderChart);
     el('reset-btn').addEventListener('click', () => {
+        const defaults = getDefaultActionState();
         if (el('act-out'))         el('act-out').checked = true;
         if (el('act-denied'))      el('act-denied').checked = true;
         if (el('act-unsupported')) el('act-unsupported').checked = true;
-        if (el('act-expired'))     el('act-expired').checked = true;
+        if (el('act-warning'))     el('act-warning').checked = defaults.warning;
+        if (el('act-expired'))     el('act-expired').checked = defaults.expired;
+        if (el('act-daemon-exit')) el('act-daemon-exit').checked = defaults.daemonExit;
+        if (el('act-lost-comm'))   el('act-lost-comm').checked = defaults.lostComm;
         // Clear feature filter so all features default to checked on next render
         const ffc = el('feature-filter-checks');
         if (ffc) ffc.innerHTML = '';
@@ -1239,6 +1652,7 @@ function initListeners() {
         // Live preview theme change without saving
         document.body.className = `theme-${e.target.value}`;
     });
+    el('s-use-prefix').addEventListener('change', () => Settings._updatePrefixInputState());
 
     el('save-settings-btn').addEventListener('click', () => {
         Settings.readFromUI();

@@ -24,7 +24,8 @@ const Reports = {
         { key: 'user-summary',     label: 'User Summary'                },
         { key: 'computer-summary', label: 'Computer Summary'            },
         { key: 'feature-totals',   label: 'Feature Totals (All Time)'   },
-        { key: 'denial-report',    label: 'Denial, Unsupported & Expired Report' },
+        { key: 'denial-report',    label: 'Denial, Warning, Unsupported & Expired Report' },
+        { key: 'daemon-events',    label: 'Vendor Daemon Exit Events'   },
         { key: 'top-users',        label: 'Top Users by Checkout'       },
         { key: 'top-features',     label: 'Top Features by Checkout'    },
     ],
@@ -81,20 +82,30 @@ const Reports = {
             case 'computer-summary': return this.computerSummary(events, format);
             case 'feature-totals':   return this.featureTotals(events, format);
             case 'denial-report':    return this.denialReport(events, format);
+            case 'daemon-events':    return this.daemonEvents(events, format);
             case 'top-users':        return this.topUsers(events, format);
             case 'top-features':     return this.topFeatures(events, format);
             default:                 return 'Unknown report type.';
         }
     },
 
+    _usageEvents(events) {
+        return events.filter(e => e.action !== 'DAEMON_EXIT');
+    },
+
+    _daemonExitEvents(events) {
+        return events.filter(e => e.action === 'DAEMON_EXIT');
+    },
+
     /* ── Feature Usage by Date ─────────────────────────────────────────────── */
 
     featureByDate(events, format = 'text') {
+        events = this._usageEvents(events);
         const byDate = {};
         for (const e of events) {
             if (!byDate[e.date]) byDate[e.date] = {};
             if (!byDate[e.date][e.feature])
-                byDate[e.date][e.feature] = { OUT: 0, DENIED: 0, UNSUPPORTED: 0, EXPIRED: 0 };
+                byDate[e.date][e.feature] = { OUT: 0, DENIED: 0, UNSUPPORTED: 0, WARNING: 0, EXPIRED: 0 };
             const c = byDate[e.date][e.feature];
             if (c[e.action] !== undefined) c[e.action]++;
         }
@@ -105,12 +116,12 @@ const Reports = {
             const parts = [];
             for (const date of dates) {
                 parts.push(`### ${date}\n`);
-                parts.push('| Feature | Checkouts | Denied | Unsupported | Expired |');
-                parts.push('|:---|---:|---:|---:|---:|');
+                parts.push('| Feature | Checkouts | Denied | Unsupported | Warning | Expired |');
+                parts.push('|:---|---:|---:|---:|---:|---:|');
                 for (const feat of Object.keys(byDate[date]).sort()) {
                     const c = byDate[date][feat];
-                    if (c.OUT + c.DENIED + c.UNSUPPORTED + c.EXPIRED > 0)
-                        parts.push(`| \`${feat}\` | ${c.OUT} | ${c.DENIED} | ${c.UNSUPPORTED} | ${c.EXPIRED} |`);
+                    if (c.OUT + c.DENIED + c.UNSUPPORTED + c.WARNING + c.EXPIRED > 0)
+                        parts.push(`| \`${feat}\` | ${c.OUT} | ${c.DENIED} | ${c.UNSUPPORTED} | ${c.WARNING} | ${c.EXPIRED} |`);
                 }
                 parts.push('');
             }
@@ -120,15 +131,16 @@ const Reports = {
         const out = [];
         for (const date of dates) {
             out.push(`Date: ${date}`);
-            const usageL = [], deniedL = [], unsuppL = [], expiredL = [];
+            const usageL = [], deniedL = [], unsuppL = [], warningL = [], expiredL = [];
             for (const feat of Object.keys(byDate[date]).sort()) {
                 const c = byDate[date][feat];
                 if (c.OUT        > 0) usageL.push(`  Count: ${c.OUT}, Feature: ${feat}`);
                 if (c.DENIED     > 0) deniedL.push(`  Count: ${c.DENIED}, DENIED: ${feat}, (Licensed number of users already reached. (-4,342))`);
                 if (c.UNSUPPORTED > 0) unsuppL.push(`  Count: ${c.UNSUPPORTED}, UNSUPPORTED: ${feat}, (No such feature exists. (-5,346))`);
+                if (c.WARNING    > 0) warningL.push(`  Count: ${c.WARNING}, WARNING: ${feat}, (Feature expiry warning.)`);
                 if (c.EXPIRED    > 0) expiredL.push(`  Count: ${c.EXPIRED}, EXPIRED: ${feat}, (Feature license is expired.)`);
             }
-            out.push(...usageL, ...deniedL, ...unsuppL, ...expiredL, '');
+            out.push(...usageL, ...deniedL, ...unsuppL, ...warningL, ...expiredL, '');
         }
         return out.join('\n');
     },
@@ -136,6 +148,7 @@ const Reports = {
     /* ── User Summary ──────────────────────────────────────────────────────── */
 
     userSummary(events, format = 'text') {
+        events = this._usageEvents(events);
         const byUser = {};
         for (const e of events) {
             if (e.action !== 'OUT') continue;
@@ -175,6 +188,7 @@ const Reports = {
     /* ── Computer Summary ──────────────────────────────────────────────────── */
 
     computerSummary(events, format = 'text') {
+        events = this._usageEvents(events);
         const byComp = {};
         for (const e of events) {
             if (e.action !== 'OUT') continue;
@@ -214,10 +228,11 @@ const Reports = {
     /* ── Feature Totals (All Time) ─────────────────────────────────────────── */
 
     featureTotals(events, format = 'text') {
+        events = this._usageEvents(events);
         const totals = {};
         for (const e of events) {
             if (!totals[e.feature])
-                totals[e.feature] = { OUT: 0, DENIED: 0, UNSUPPORTED: 0, EXPIRED: 0,
+                totals[e.feature] = { OUT: 0, DENIED: 0, UNSUPPORTED: 0, WARNING: 0, EXPIRED: 0,
                                       users: new Set(), computers: new Set() };
             const t = totals[e.feature];
             if (t[e.action] !== undefined) t[e.action]++;
@@ -228,29 +243,29 @@ const Reports = {
 
         if (format === 'markdown') {
             const rows = [
-                '| Feature | Checkouts | Denied | Unsupported | Expired | Unique Users | Computers |',
-                '|:---|---:|---:|---:|---:|---:|---:|',
+                '| Feature | Checkouts | Denied | Unsupported | Warning | Expired | Unique Users | Computers |',
+                '|:---|---:|---:|---:|---:|---:|---:|---:|',
             ];
             for (const [feat, c] of sorted)
-                rows.push(`| \`${feat}\` | ${c.OUT} | ${c.DENIED} | ${c.UNSUPPORTED} | ${c.EXPIRED} | ${c.users.size} | ${c.computers.size} |`);
+                rows.push(`| \`${feat}\` | ${c.OUT} | ${c.DENIED} | ${c.UNSUPPORTED} | ${c.WARNING} | ${c.EXPIRED} | ${c.users.size} | ${c.computers.size} |`);
             return rows.join('\n');
         }
 
         const SEP = '\u2500';
-        const hdr = `${'Feature'.padEnd(32)}${'Checkouts'.padStart(10)}${'Denied'.padStart(8)}${'Unsupport'.padStart(10)}${'Expired'.padStart(9)}${'Users'.padStart(7)}${'Computers'.padStart(10)}`;
-        const rows = [hdr, SEP.repeat(86)];
+        const hdr = `${'Feature'.padEnd(32)}${'Checkouts'.padStart(10)}${'Denied'.padStart(8)}${'Unsupport'.padStart(10)}${'Warning'.padStart(9)}${'Expired'.padStart(9)}${'Users'.padStart(7)}${'Computers'.padStart(10)}`;
+        const rows = [hdr, SEP.repeat(95)];
         for (const [feat, c] of sorted)
-            rows.push(`${feat.padEnd(32)}${String(c.OUT).padStart(10)}${String(c.DENIED).padStart(8)}${String(c.UNSUPPORTED).padStart(10)}${String(c.EXPIRED).padStart(9)}${String(c.users.size).padStart(7)}${String(c.computers.size).padStart(10)}`);
+            rows.push(`${feat.padEnd(32)}${String(c.OUT).padStart(10)}${String(c.DENIED).padStart(8)}${String(c.UNSUPPORTED).padStart(10)}${String(c.WARNING).padStart(9)}${String(c.EXPIRED).padStart(9)}${String(c.users.size).padStart(7)}${String(c.computers.size).padStart(10)}`);
         return rows.join('\n');
     },
 
-    /* ── Denial, Unsupported & Expired Report ──────────────────────────────── */
+    /* ── Denial, Warning, Unsupported & Expired Report ─────────────────────── */
 
     denialReport(events, format = 'text') {
-        const relevant = events.filter(e =>
-            e.action === 'DENIED' || e.action === 'UNSUPPORTED' || e.action === 'EXPIRED'
+        const relevant = this._usageEvents(events).filter(e =>
+            e.action === 'DENIED' || e.action === 'UNSUPPORTED' || e.action === 'WARNING' || e.action === 'EXPIRED'
         );
-        if (!relevant.length) return 'No denial, unsupported, or expired events found.';
+        if (!relevant.length) return 'No denial, warning, unsupported, or expired events found.';
 
         const byDate = {};
         for (const e of relevant) {
@@ -279,9 +294,50 @@ const Reports = {
                     ? 'Licensed number of users already reached. (-4,342)'
                     : e.action === 'UNSUPPORTED'
                         ? 'No such feature exists. (-5,346)'
-                        : 'Feature license is expired.';
+                        : e.action === 'WARNING'
+                            ? 'Feature expiry warning.'
+                            : 'Feature license is expired.';
                 const actor = e.userComputer ? `  by ${e.userComputer}` : '';
                 out.push(`  ${e.action}: ${e.feature}${actor}  [${reason}]`);
+            }
+            out.push('');
+        }
+        return out.join('\n');
+    },
+
+    daemonEvents(events, format = 'text') {
+        const relevant = this._daemonExitEvents(events);
+        if (!relevant.length) return 'No vendor daemon exit events found.';
+
+        const byDate = {};
+        for (const e of relevant) {
+            if (!byDate[e.date]) byDate[e.date] = [];
+            byDate[e.date].push(e);
+        }
+
+        if (format === 'markdown') {
+            const parts = [];
+            for (const date of Object.keys(byDate).sort()) {
+                parts.push(`### ${date}\n`);
+                parts.push('| Event | Signal | Exit Reason | Source File | Explanation |');
+                parts.push('|:---|---:|---:|:---|:---|');
+                for (const e of byDate[date]) {
+                    parts.push(`| **${e.title || e.feature}** | ${e.signalCode} | ${e.exitReason} | ${e.sourceFile || ''} | ${e.explanation || ''} |`);
+                }
+                parts.push('');
+            }
+            return parts.join('\n');
+        }
+
+        const out = [];
+        for (const date of Object.keys(byDate).sort()) {
+            out.push(`Date: ${date}`);
+            for (const e of byDate[date]) {
+                out.push(`  Count: 1, Event: ${e.feature}`);
+                out.push(`    Signal: ${e.signalCode}, Exit Reason: ${e.exitReason}`);
+                out.push(`    Source File: ${e.sourceFile || ''}`);
+                out.push(`    Explanation: ${e.explanation || ''}`);
+                out.push(`    Log Message: ${e.rawMessage || ''}`);
             }
             out.push('');
         }
@@ -291,6 +347,7 @@ const Reports = {
     /* ── Top Users ─────────────────────────────────────────────────────────── */
 
     topUsers(events, format = 'text', n = 30) {
+        events = this._usageEvents(events);
         const counts = {};
         for (const e of events) {
             if (e.action !== 'OUT') continue;
@@ -315,6 +372,7 @@ const Reports = {
     /* ── Top Features ──────────────────────────────────────────────────────── */
 
     topFeatures(events, format = 'text', n = 30) {
+        events = this._usageEvents(events);
         const counts = {};
         for (const e of events) {
             if (e.action !== 'OUT') continue;
