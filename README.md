@@ -26,6 +26,7 @@ An interactive, browser-based GUI requiring no installation or server.
 - **Horizontal scroll** — when enabled the chart expands to show every date label; configurable minimum pixels per label
 - **Summary cards** — instant totals for checkouts, unique features, users, computers, denials, expired features, and vendor-daemon exits
 - **Date range filter** — zoom into any time period without reloading
+- **Linked hover emphasis** — hovering a Series entry highlights the matching chart series; hovering chart points highlights matching Series entries and tooltip groups; when points overlap exactly, all matching series are emphasized together
 - **Left panel — three real-time filter sections** (all changes apply instantly, no Apply button needed):
   - **Action** — independently toggle Checkouts, Denied, Unsupported, Warnings, Expired, Daemon Exits, and Lost Comm events; All / None buttons
   - **Series** — click any series to show/hide it on the chart; All / None buttons (in By Feature mode this becomes a Users/Computers filter)
@@ -41,7 +42,7 @@ An interactive, browser-based GUI requiring no installation or server.
   - Top Features by Checkout
   - **All Reports (Combined View)** — displays every report in one scrollable output
 - **Export format** — choose **Plain Text (.txt)** or **Markdown (.md)** before generating or exporting
-- **Rich external tooltip** — scrollable tooltip content with optional zero-value hiding; in Click to Pin mode, a pin icon and tiny Pinned/Unpinned indicator appear in the tooltip header
+- **Rich external tooltip** — scrollable tooltip content with optional zero-value hiding; sticky header keeps date + pin controls visible while scrolling; in Click to Pin mode, a pin icon and tiny Pinned/Unpinned indicator appear in the tooltip header
 - **Export** — save any report to a file; "All Reports" triggers a separate download per type; export the chart via **File → Export Chart…** in PNG, JPEG, or SVG — SVG is true vector (scalable, editable in Inkscape/Illustrator); all formats include the full chart width (including any horizontally scrolled-off area) and the legend panel
 - **Settings** (Settings tab):
   - Vendor daemon name (default: `geoslope`)
@@ -120,12 +121,11 @@ The script recognizes these date patterns in log files:
 - `Time: Day Mon DD YYYY HH:MM:SS`
 - `TIMESTAMP MM/DD/YYYY`
 
-The parser recognizes these action entries:
+The CLI parser recognizes these action entries:
 - `OUT`, `IN`, `DENIED`, `UNSUPPORTED`
-- `Warning: <feature> expires <date>`
 - `EXPIRED:`
-- `EXITING DUE TO SIGNAL <signal> Exit reason <reason>`
-- `Lost communications with lmgrd.`
+
+Note: the web viewer parser includes additional event handling for warning lines, vendor-daemon signal/exit messages, and lost-communication events.
 
 For `EXPIRED:` lines, repeated entries for the same feature at the same timestamp are collapsed into a single reported event.
 For vendor-daemon shutdown lines, the web viewer recognizes these signal/exit-reason mappings and records them as separate daemon-exit timeline events: `25/2`, `27/4`, `28/5`, `32/9`, `51/28`, and `65/42`.

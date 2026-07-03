@@ -48,6 +48,9 @@ const State = {
     tooltipLocked: false,
     tooltipHideTimer: null,
     tooltipPinned: false,
+    chartHoverDatasetIndexes: new Set(),
+    legendHoverDatasetIndex: null,
+    legendSeriesItemsByDataset: new Map(),
 };
 
 // ── DOM helper ────────────────────────────────────────────────────────────────
@@ -173,6 +176,46 @@ function hideChartTooltip(force = false) {
     }, State.settings.tooltipStickyDelayMs);
 }
 
+function getActiveHoveredDatasetIndexes() {
+    if (Number.isInteger(State.legendHoverDatasetIndex)) {
+        return new Set([State.legendHoverDatasetIndex]);
+    }
+    return State.chartHoverDatasetIndexes;
+}
+
+function refreshLegendSeriesHoverState() {
+    const activeIndexes = getActiveHoveredDatasetIndexes();
+    State.legendSeriesItemsByDataset.forEach((item, idx) => {
+        item.classList.toggle('series-hovered', activeIndexes.has(idx));
+    });
+}
+
+function setChartHoverDatasetIndexes(datasetIndexes) {
+    const next = new Set(
+        (datasetIndexes || [])
+            .filter(Number.isInteger)
+    );
+
+    if (next.size === State.chartHoverDatasetIndexes.size) {
+        let same = true;
+        for (const idx of next) {
+            if (!State.chartHoverDatasetIndexes.has(idx)) {
+                same = false;
+                break;
+            }
+        }
+        if (same) return;
+    }
+
+    State.chartHoverDatasetIndexes = next;
+    refreshLegendSeriesHoverState();
+
+    const tooltipEl = document.getElementById('chart-tooltip');
+    if (State.chart && tooltipEl && !tooltipEl.classList.contains('hidden')) {
+        State.chart.update('none');
+    }
+}
+
 function renderExternalTooltip(context) {
     const { chart, tooltip } = context;
     const tooltipEl = ensureChartTooltip();
@@ -192,6 +235,7 @@ function renderExternalTooltip(context) {
     const points = tooltip.dataPoints || [];
     const groupedLines = bodyGroups.map((lines, idx) => ({
         lines,
+        datasetIndex: points[idx]?.datasetIndex,
         isSystem: Boolean(points[idx]?.dataset?.isSystemGroup) || isSystemSeriesLabel(points[idx]?.dataset?.label),
     }));
 
@@ -242,12 +286,18 @@ function renderExternalTooltip(context) {
         const groupWrap = document.createElement('div');
         groupWrap.className = 'chart-tooltip-group';
         if (group.isSystem) groupWrap.classList.add('chart-tooltip-group-system');
+        if (State.chartHoverDatasetIndexes.has(group.datasetIndex)) {
+            groupWrap.classList.add('chart-tooltip-group-emphasis');
+        }
         group.lines.forEach((line, lineIndex) => {
             const row = document.createElement('div');
             row.className = 'chart-tooltip-line';
             const isDetailLine = /^\s+/.test(line);
             if (isDetailLine) row.classList.add('chart-tooltip-line-detail');
             row.textContent = isDetailLine ? line.trimStart() : line;
+            if (!group.isSystem && row.textContent.startsWith('Expires:')) {
+                row.classList.add('chart-tooltip-line-warning-detail');
+            }
             if (group.isSystem) {
                 if (lineIndex === 0) {
                     row.classList.add('chart-tooltip-line-system-title');
@@ -302,6 +352,35 @@ function bindTooltipInteractionHandlers() {
     if (!canvas || canvas.dataset.tooltipBound === 'true') return;
     canvas.dataset.tooltipBound = 'true';
 
+    canvas.addEventListener('mousemove', event => {
+        if (!State.chart) return;
+        const overlapping = State.chart.getElementsAtEventForMode(
+            event,
+            'point',
+            { intersect: true },
+            false
+        );
+
+        if (overlapping.length) {
+            setChartHoverDatasetIndexes(
+                [...new Set(overlapping.map(point => point.datasetIndex))]
+            );
+            return;
+        }
+
+        const nearest = State.chart.getElementsAtEventForMode(
+            event,
+            'nearest',
+            { intersect: false },
+            false
+        );
+        setChartHoverDatasetIndexes(nearest[0] ? [nearest[0].datasetIndex] : []);
+    });
+
+    canvas.addEventListener('mouseleave', () => {
+        setChartHoverDatasetIndexes([]);
+    });
+
     canvas.addEventListener('click', event => {
         if (State.settings.tooltipInteractionMode !== 'click-pin') return;
         if (!State.chart) return;
@@ -329,6 +408,51 @@ function bindTooltipInteractionHandlers() {
         if (event.target === canvas || canvas.contains(event.target) || tooltip.contains(event.target)) return;
         hideChartTooltip(true);
     });
+}
+
+function applySeriesHoverHighlight(datasetIndex = null) {
+    if (!State.chart) return;
+    const chartType = el('chart-type')?.value;
+    const isLine = chartType === 'line';
+
+    State.chart.data.datasets.forEach((ds, idx) => {
+        const baseHex = ds.baseHexColor || ds.borderColor;
+        const baseBorderWidth = ds.baseBorderWidth ?? (isLine ? 2 : 1);
+        const basePointRadius = ds.basePointRadius ?? (isLine ? 3 : 0);
+        const basePointHoverRadius = ds.basePointHoverRadius ?? (isLine ? 5 : 0);
+
+        if (datasetIndex == null) {
+            ds.borderColor = baseHex;
+            ds.backgroundColor = isLine ? hexAlpha(baseHex, .12) : hexAlpha(baseHex, .78);
+            ds.borderWidth = baseBorderWidth;
+            if (isLine) {
+                ds.pointRadius = basePointRadius;
+                ds.pointHoverRadius = basePointHoverRadius;
+            }
+            return;
+        }
+
+        if (idx === datasetIndex) {
+            ds.borderColor = baseHex;
+            ds.backgroundColor = isLine ? hexAlpha(baseHex, .2) : hexAlpha(baseHex, .9);
+            ds.borderWidth = baseBorderWidth + 1;
+            if (isLine) {
+                ds.pointRadius = basePointRadius + 1;
+                ds.pointHoverRadius = basePointHoverRadius + 1;
+            }
+            return;
+        }
+
+        ds.borderColor = hexAlpha(baseHex, .25);
+        ds.backgroundColor = isLine ? hexAlpha(baseHex, .05) : hexAlpha(baseHex, .22);
+        ds.borderWidth = Math.max(1, baseBorderWidth - 1);
+        if (isLine) {
+            ds.pointRadius = Math.max(1, basePointRadius - 1);
+            ds.pointHoverRadius = Math.max(2, basePointHoverRadius - 1);
+        }
+    });
+
+    State.chart.update('none');
 }
 
 function buildTooltipLines(group, total, details) {
@@ -810,17 +934,22 @@ function renderChart() {
 
     const jsDsets = datasets.map((ds, i) => {
         const hex = State.settings.colors[i % State.settings.colors.length];
+        const isLine = jsType === 'line';
         return {
             label          : ds.label,
             data           : ds.data,
             isSystemGroup  : ds.isSystemGroup,
+            baseHexColor   : hex,
+            baseBorderWidth: isLine ? 2 : 1,
+            basePointRadius: isLine ? 3 : 0,
+            basePointHoverRadius: isLine ? 5 : 0,
             borderColor    : hex,
-            backgroundColor: jsType === 'line' ? hexAlpha(hex, .12) : hexAlpha(hex, .78),
-            borderWidth    : jsType === 'line' ? 2 : 1,
-            fill           : jsType === 'line' ? false : undefined,
+            backgroundColor: isLine ? hexAlpha(hex, .12) : hexAlpha(hex, .78),
+            borderWidth    : isLine ? 2 : 1,
+            fill           : isLine ? false : undefined,
             tension        : 0.3,
-            pointRadius    : jsType === 'line' ? 3 : undefined,
-            pointHoverRadius: jsType === 'line' ? 5 : undefined,
+            pointRadius    : isLine ? 3 : undefined,
+            pointHoverRadius: isLine ? 5 : undefined,
         };
     });
 
@@ -941,6 +1070,7 @@ function renderLegend() {
 
     panel.innerHTML = '';
     if (!State.chart) return;
+    State.legendSeriesItemsByDataset = new Map();
 
     // Helper: build a section header with All / None buttons
     function makeHeader(titleText, onAll, onNone) {
@@ -1075,6 +1205,17 @@ function renderLegend() {
 
             item.appendChild(swatch);
             item.appendChild(lbl);
+            State.legendSeriesItemsByDataset.set(i, item);
+            item.addEventListener('mouseenter', () => {
+                State.legendHoverDatasetIndex = i;
+                refreshLegendSeriesHoverState();
+                applySeriesHoverHighlight(i);
+            });
+            item.addEventListener('mouseleave', () => {
+                if (State.legendHoverDatasetIndex === i) State.legendHoverDatasetIndex = null;
+                refreshLegendSeriesHoverState();
+                applySeriesHoverHighlight();
+            });
             item.addEventListener('click', () => {
                 if (!State.chart) return;
                 const nowVisible = State.chart.isDatasetVisible(i);
@@ -1098,6 +1239,7 @@ function renderLegend() {
                 seriesItems.forEach(it => it.classList.add('series-hidden'));
             }
         ));
+        refreshLegendSeriesHoverState();
     }
     seriesSection.appendChild(seriesList);
     panel.appendChild(seriesSection);

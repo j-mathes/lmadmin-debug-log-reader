@@ -430,6 +430,14 @@ body {
 .legend-item:hover { background: var(--bg); }
 .legend-item.series-hidden { opacity: .35; }
 
+.legend-item.series-hovered {
+    background: var(--bg);
+}
+
+.legend-item.series-hovered span:last-child {
+    font-weight: 600;
+}
+
 .legend-swatch {
     width: 12px;
     height: 12px;
@@ -591,6 +599,14 @@ body {
     margin-bottom: 2px;
 }
 
+.chart-tooltip-group-emphasis {
+    background: color-mix(in srgb, var(--accent) 10%, transparent);
+    border-left: 2px solid var(--accent);
+    border-radius: 3px;
+    margin-left: -6px;
+    padding-left: 6px;
+}
+
 .chart-tooltip-group-system {
     margin-bottom: 8px;
 }
@@ -617,6 +633,10 @@ body {
 
 .chart-tooltip-line-detail {
     padding-left: 12px;
+}
+
+.chart-tooltip-line-warning-detail {
+    padding-left: 20px;
 }
 
 /* ── Files panel ─────────────────────────────────────────────────────────── */
