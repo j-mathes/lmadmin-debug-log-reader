@@ -24,10 +24,10 @@ Open `index.html` directly in a browser — no installation or server required.
 - **Date range filter** — zoom into any time period without reloading
 - **Linked hover** — hovering a Series entry highlights the matching chart series and vice versa
 - **Real-time filters** (left panel, no Apply button needed):
-  - **Action** — toggle Checkouts, Denied, Unsupported, Warnings, Expired, Daemon Exits, and Lost Comm; All / None buttons
+  - **Action** — toggle Checkouts, Denied, Unsupported, Warnings, Expired, Daemon Exits, Lost Comm, and Version Mismatch; All / None buttons
   - **Series** — show/hide individual series; All / None buttons
   - **Features** — per-feature sub-filter in User and Computer views; All / None buttons
-- **Nine reports** (Report tab): Feature Usage by Date, User Summary, Computer Summary, Feature Totals, Denial/Warning/Unsupported/Expired, Vendor Daemon Exit Events, Top Users by Checkout, Top Features by Checkout, and All Reports Combined
+- **Nine reports** (Report tab): Feature Usage by Date, User Summary, Computer Summary, Feature Totals, Denial/Warning/Unsupported/Expired/Version Mismatch, Vendor Daemon Exit Events, Top Users by Checkout, Top Features by Checkout, and All Reports Combined
 - **Export** — reports as plain text or Markdown; chart as PNG, JPEG, or SVG via **File → Export Chart…**
 - **Settings** (Settings tab):
   - Vendor daemon name (default: `geoslope`) and feature prefix filter (default: `pkc_`) with an enable/disable toggle
@@ -91,7 +91,7 @@ A file dialog opens — select your `.log` file. The report is saved as `YYYY-MM
 
 Recognised actions: `OUT`, `IN`, `DENIED`, `UNSUPPORTED`, `EXPIRED:`
 
-> **Note:** The web viewer also handles warning lines, vendor-daemon exit messages, and lost-communication events, which the CLI script does not.
+> **Note:** The web viewer also handles warning lines, vendor-daemon exit messages, lost-communication events, and version mismatch errors, which the CLI script does not.
 
 ### Vendor Daemon Configuration
 

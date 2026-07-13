@@ -60,6 +60,7 @@ const LogParser = {
         let   curDate = null;
         const expiredSeen = new Set();
         const warningSeen = new Set();
+        const versionMismatchSeen = new Set();
 
         // Date pattern group 1/2: "Start-Date: Mon Jan 15 2025 09:30:15 W. …"
         //                                  or  "Time: …"
@@ -81,6 +82,9 @@ const LogParser = {
         const lostCommRe = new RegExp(
             `\\(${daemon}\\)\\s+Lost communications with lmgrd\\.?`,
             'i'
+        );
+        const versionMismatchRe = new RegExp(
+            `\\(${daemon}\\)\\s+Request denied:\\s+Client\\s+\\(([^)]+)\\)\\s+newer than Vendor Daemon\\s+\\(([^)]+)\\)`
         );
         const daemonExitRe = new RegExp(
             `\\(${daemon}\\)\\s+EXITING DUE TO SIGNAL\\s+(\\d+)\\s+Exit reason\\s+(\\d+)`
@@ -167,6 +171,34 @@ const LogParser = {
                     category: 'lost-comm',
                     title: 'Lost communications with lmgrd.',
                     explanation: 'The vendor daemon lost communication with lmgrd.',
+                    rawMessage: line.trim()
+                });
+                continue;
+            }
+
+            const vm = versionMismatchRe.exec(line);
+            if (vm) {
+                const clientVersion = vm[1];
+                const daemonVersion = vm[2];
+                const rawTime = this._extractTime(line);
+                if (rawTime) {
+                    const dedupeKey = `${sourceFile || ''}|${curDate}|${rawTime}|${clientVersion}|${daemonVersion}`;
+                    if (versionMismatchSeen.has(dedupeKey)) continue;
+                    versionMismatchSeen.add(dedupeKey);
+                }
+                events.push({
+                    date: curDate,
+                    feature: 'Version Mismatch',
+                    user: 'Vendor Daemon',
+                    computer: vendorDaemon || 'Vendor Daemon',
+                    userComputer: vendorDaemon ? `Vendor Daemon@${vendorDaemon}` : 'Vendor Daemon',
+                    action: 'VERSION_MISMATCH',
+                    sourceFile,
+                    category: 'version-mismatch',
+                    clientVersion,
+                    daemonVersion,
+                    title: 'Version Mismatch: Client Newer Than Vendor Daemon',
+                    explanation: `The client (v${clientVersion}) is newer than the vendor daemon (v${daemonVersion}). The vendor daemon must be upgraded to serve this client.`,
                     rawMessage: line.trim()
                 });
                 continue;

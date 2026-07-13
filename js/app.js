@@ -21,9 +21,10 @@ const DEFAULTS = {
     topN             : 10,
     chartScroll      : true,
     chartMinColWidth : 40,
-    showDaemonExits  : false,
-    showLostComm     : false,
-    showWarnings     : false,
+    showDaemonExits     : false,
+    showLostComm        : false,
+    showVersionMismatch : false,
+    showWarnings        : false,
     showExpired      : true,
     hideZeroTooltipEntries: true,
     tooltipInteractionMode: 'hover-lock',
@@ -87,7 +88,7 @@ function compareLabels(left, right) {
 
 function isSystemSeriesLabel(label) {
     const text = String(label ?? '');
-    return text === 'Lost Comm' || /^Signal\s+\d+\s*\/\s*Exit\s+\d+$/i.test(text);
+    return text === 'Lost Comm' || text === 'Version Mismatch' || /^Signal\s+\d+\s*\/\s*Exit\s+\d+$/i.test(text);
 }
 
 function isDaemonExitEvent(event) {
@@ -98,6 +99,10 @@ function isLostCommEvent(event) {
     return event.action === 'LOST_COMM' || event.category === 'lost-comm';
 }
 
+function isVersionMismatchEvent(event) {
+    return event.action === 'VERSION_MISMATCH' || event.category === 'version-mismatch';
+}
+
 function isWarningEvent(event) {
     return event.action === 'WARNING' || event.category === 'warning';
 }
@@ -105,6 +110,7 @@ function isWarningEvent(event) {
 function passesFeaturePrefix(event, prefix) {
     return isDaemonExitEvent(event)
         || isLostCommEvent(event)
+        || isVersionMismatchEvent(event)
         || !State.settings.useFeaturePrefix
         || !prefix
         || event.feature.startsWith(prefix);
@@ -122,8 +128,9 @@ function getDefaultActionState() {
         unsupported: true,
         warning: State.settings.showWarnings,
         expired: State.settings.showExpired,
-        daemonExit: State.settings.showDaemonExits,
-        lostComm: State.settings.showLostComm,
+        daemonExit:      State.settings.showDaemonExits,
+        lostComm:        State.settings.showLostComm,
+        versionMismatch: State.settings.showVersionMismatch,
     };
 }
 
@@ -473,6 +480,13 @@ function buildTooltipLines(group, total, details) {
         return lines;
     }
 
+    const versionMismatchEvent = details.find(isVersionMismatchEvent);
+    if (versionMismatchEvent) {
+        if (versionMismatchEvent.title) lines.push(`   ${versionMismatchEvent.title}`);
+        if (versionMismatchEvent.explanation) lines.push(`   ${versionMismatchEvent.explanation}`);
+        return lines;
+    }
+
     const warningEvent = details.find(isWarningEvent);
     if (warningEvent?.warningExpiresOn) {
         lines.push(`   Expires: ${warningEvent.warningExpiresOn}`);
@@ -508,9 +522,10 @@ const Settings = {
         State.settings.topN             = Number.isNaN(rawN) ? 10 : rawN;
         State.settings.chartScroll      = el('s-chart-scroll').value === 'true';
         State.settings.chartMinColWidth = parseInt(el('s-chart-min-col-width').value, 10) || 40;
-        State.settings.showDaemonExits  = el('s-show-daemon-exits').value === 'true';
-        State.settings.showLostComm     = el('s-show-lost-comm').value === 'true';
-        State.settings.showWarnings     = el('s-show-warnings').value === 'true';
+        State.settings.showDaemonExits      = el('s-show-daemon-exits').value === 'true';
+        State.settings.showLostComm          = el('s-show-lost-comm').value === 'true';
+        State.settings.showVersionMismatch   = el('s-show-version-mismatch').value === 'true';
+        State.settings.showWarnings          = el('s-show-warnings').value === 'true';
         State.settings.showExpired      = el('s-show-expired').value === 'true';
         State.settings.hideZeroTooltipEntries = el('s-hide-zero-tooltip').value === 'true';
         State.settings.tooltipInteractionMode = el('s-tooltip-mode').value;
@@ -532,9 +547,10 @@ const Settings = {
         el('s-top-n').value              = String(State.settings.topN);
         el('s-chart-scroll').value       = String(State.settings.chartScroll);
         el('s-chart-min-col-width').value = String(State.settings.chartMinColWidth);
-        el('s-show-daemon-exits').value = String(State.settings.showDaemonExits);
-        el('s-show-lost-comm').value    = String(State.settings.showLostComm);
-        el('s-show-warnings').value     = String(State.settings.showWarnings);
+        el('s-show-daemon-exits').value    = String(State.settings.showDaemonExits);
+        el('s-show-lost-comm').value       = String(State.settings.showLostComm);
+        el('s-show-version-mismatch').value = String(State.settings.showVersionMismatch);
+        el('s-show-warnings').value        = String(State.settings.showWarnings);
         el('s-show-expired').value      = String(State.settings.showExpired);
         el('s-hide-zero-tooltip').value = String(State.settings.hideZeroTooltipEntries);
         el('s-tooltip-mode').value      = State.settings.tooltipInteractionMode;
@@ -764,8 +780,9 @@ function getChartEvents() {
     if (isActionEnabled('act-unsupported', defaults.unsupported)) actions.add('UNSUPPORTED');
     if (isActionEnabled('act-warning', defaults.warning))         actions.add('WARNING');
     if (isActionEnabled('act-expired', defaults.expired))         actions.add('EXPIRED');
-    if (isActionEnabled('act-daemon-exit', defaults.daemonExit))  actions.add('DAEMON_EXIT');
-    if (isActionEnabled('act-lost-comm', defaults.lostComm))      actions.add('LOST_COMM');
+    if (isActionEnabled('act-daemon-exit', defaults.daemonExit))              actions.add('DAEMON_EXIT');
+    if (isActionEnabled('act-lost-comm', defaults.lostComm))                  actions.add('LOST_COMM');
+    if (isActionEnabled('act-version-mismatch', defaults.versionMismatch))    actions.add('VERSION_MISMATCH');
 
     const from   = el('date-from').value;
     const to     = el('date-to').value;
@@ -1045,8 +1062,9 @@ function renderLegend() {
         unsupported: el('act-unsupported')?.checked ?? defaultActions.unsupported,
         warning:     el('act-warning')?.checked ?? defaultActions.warning,
         expired:     el('act-expired')?.checked ?? defaultActions.expired,
-        daemonExit:  el('act-daemon-exit')?.checked ?? defaultActions.daemonExit,
-        lostComm:    el('act-lost-comm')?.checked ?? defaultActions.lostComm,
+        daemonExit:      el('act-daemon-exit')?.checked ?? defaultActions.daemonExit,
+        lostComm:        el('act-lost-comm')?.checked ?? defaultActions.lostComm,
+        versionMismatch: el('act-version-mismatch')?.checked ?? defaultActions.versionMismatch,
     };
 
     // Capture feature filter state before wiping the panel
@@ -1106,8 +1124,9 @@ function renderLegend() {
         { id: 'act-unsupported', label: 'Unsupported', key: 'unsupported' },
         { id: 'act-warning',     label: 'Warnings',    key: 'warning'     },
         { id: 'act-expired',     label: 'Expired',     key: 'expired'     },
-        { id: 'act-daemon-exit', label: 'Daemon Exits', key: 'daemonExit' },
-        { id: 'act-lost-comm',   label: 'Lost Comm',   key: 'lostComm'    },
+        { id: 'act-daemon-exit',      label: 'Daemon Exits',     key: 'daemonExit'      },
+        { id: 'act-lost-comm',         label: 'Lost Comm',        key: 'lostComm'        },
+        { id: 'act-version-mismatch',  label: 'Version Mismatch', key: 'versionMismatch' },
     ].forEach(({ id, label, key }) => {
         const lbl = document.createElement('label');
         lbl.className = 'legend-check';
@@ -1449,8 +1468,9 @@ function exportChart(format) {
         checkRow('Unsupported', el('act-unsupported')?.checked ?? true);
         checkRow('Warnings',    el('act-warning')?.checked     ?? State.settings.showWarnings);
         checkRow('Expired',     el('act-expired')?.checked     ?? State.settings.showExpired);
-        checkRow('Daemon Exits', el('act-daemon-exit')?.checked ?? State.settings.showDaemonExits);
-        checkRow('Lost Comm',   el('act-lost-comm')?.checked   ?? State.settings.showLostComm);
+        checkRow('Daemon Exits',     el('act-daemon-exit')?.checked      ?? State.settings.showDaemonExits);
+        checkRow('Lost Comm',        el('act-lost-comm')?.checked        ?? State.settings.showLostComm);
+        checkRow('Version Mismatch', el('act-version-mismatch')?.checked ?? State.settings.showVersionMismatch);
         divLine();
         secTitle('Series');
         State.chart.data.datasets.forEach((ds, i) => {
@@ -1551,8 +1571,9 @@ function buildVectorSVG() {
     lgCheck('Unsupported', el('act-unsupported')?.checked ?? true);
     lgCheck('Warnings',    el('act-warning')?.checked     ?? State.settings.showWarnings);
     lgCheck('Expired',     el('act-expired')?.checked     ?? State.settings.showExpired);
-    lgCheck('Daemon Exits', el('act-daemon-exit')?.checked ?? State.settings.showDaemonExits);
-    lgCheck('Lost Comm',   el('act-lost-comm')?.checked   ?? State.settings.showLostComm);
+    lgCheck('Daemon Exits',     el('act-daemon-exit')?.checked      ?? State.settings.showDaemonExits);
+    lgCheck('Lost Comm',        el('act-lost-comm')?.checked        ?? State.settings.showLostComm);
+    lgCheck('Version Mismatch', el('act-version-mismatch')?.checked ?? State.settings.showVersionMismatch);
     lgDiv();
 
     lgTitle('Series');
@@ -1769,8 +1790,9 @@ function initListeners() {
         if (el('act-unsupported')) el('act-unsupported').checked = true;
         if (el('act-warning'))     el('act-warning').checked = defaults.warning;
         if (el('act-expired'))     el('act-expired').checked = defaults.expired;
-        if (el('act-daemon-exit')) el('act-daemon-exit').checked = defaults.daemonExit;
-        if (el('act-lost-comm'))   el('act-lost-comm').checked = defaults.lostComm;
+        if (el('act-daemon-exit'))      el('act-daemon-exit').checked = defaults.daemonExit;
+        if (el('act-lost-comm'))        el('act-lost-comm').checked = defaults.lostComm;
+        if (el('act-version-mismatch')) el('act-version-mismatch').checked = defaults.versionMismatch;
         // Clear feature filter so all features default to checked on next render
         const ffc = el('feature-filter-checks');
         if (ffc) ffc.innerHTML = '';

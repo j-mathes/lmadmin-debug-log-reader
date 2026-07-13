@@ -24,7 +24,7 @@ const Reports = {
         { key: 'user-summary',     label: 'User Summary'                },
         { key: 'computer-summary', label: 'Computer Summary'            },
         { key: 'feature-totals',   label: 'Feature Totals (All Time)'   },
-        { key: 'denial-report',    label: 'Denial, Warning, Unsupported & Expired Report' },
+        { key: 'denial-report',    label: 'Denial, Warning, Unsupported, Expired & Version Mismatch Report' },
         { key: 'daemon-events',    label: 'Vendor Daemon Exit Events'   },
         { key: 'top-users',        label: 'Top Users by Checkout'       },
         { key: 'top-features',     label: 'Top Features by Checkout'    },
@@ -263,9 +263,9 @@ const Reports = {
 
     denialReport(events, format = 'text') {
         const relevant = this._usageEvents(events).filter(e =>
-            e.action === 'DENIED' || e.action === 'UNSUPPORTED' || e.action === 'WARNING' || e.action === 'EXPIRED'
+            e.action === 'DENIED' || e.action === 'UNSUPPORTED' || e.action === 'WARNING' || e.action === 'EXPIRED' || e.action === 'VERSION_MISMATCH'
         );
-        if (!relevant.length) return 'No denial, warning, unsupported, or expired events found.';
+        if (!relevant.length) return 'No denial, warning, unsupported, expired, or version mismatch events found.';
 
         const byDate = {};
         for (const e of relevant) {
@@ -280,7 +280,7 @@ const Reports = {
                 parts.push('| Action | Feature | User@Computer |');
                 parts.push('|:---|:---|:---|');
                 for (const e of byDate[date])
-                    parts.push(`| **${e.action}** | \`${e.feature}\` | ${e.userComputer} |`);
+                    parts.push(`| **${e.action}** | \`${e.feature}\` | ${e.userComputer || '—'} |`);
                 parts.push('');
             }
             return parts.join('\n');
@@ -296,7 +296,9 @@ const Reports = {
                         ? 'No such feature exists. (-5,346)'
                         : e.action === 'WARNING'
                             ? 'Feature expiry warning.'
-                            : 'Feature license is expired.';
+                            : e.action === 'VERSION_MISMATCH'
+                                ? (e.explanation || 'Client version is newer than vendor daemon.')
+                                : 'Feature license is expired.';
                 const actor = e.userComputer ? `  by ${e.userComputer}` : '';
                 out.push(`  ${e.action}: ${e.feature}${actor}  [${reason}]`);
             }
