@@ -23,8 +23,9 @@ const DEFAULTS = {
     chartMinColWidth : 40,
     showDaemonExits     : false,
     showLostComm        : false,
-    showVersionMismatch : false,
-    showWarnings        : false,
+    showVersionMismatch   : false,
+    dedupeVersionMismatch  : true,
+    showWarnings          : false,
     showExpired      : true,
     hideZeroTooltipEntries: true,
     tooltipInteractionMode: 'hover-lock',
@@ -524,8 +525,9 @@ const Settings = {
         State.settings.chartMinColWidth = parseInt(el('s-chart-min-col-width').value, 10) || 40;
         State.settings.showDaemonExits      = el('s-show-daemon-exits').value === 'true';
         State.settings.showLostComm          = el('s-show-lost-comm').value === 'true';
-        State.settings.showVersionMismatch   = el('s-show-version-mismatch').value === 'true';
-        State.settings.showWarnings          = el('s-show-warnings').value === 'true';
+        State.settings.showVersionMismatch    = el('s-show-version-mismatch').value === 'true';
+        State.settings.dedupeVersionMismatch   = el('s-dedupe-version-mismatch').value === 'true';
+        State.settings.showWarnings            = el('s-show-warnings').value === 'true';
         State.settings.showExpired      = el('s-show-expired').value === 'true';
         State.settings.hideZeroTooltipEntries = el('s-hide-zero-tooltip').value === 'true';
         State.settings.tooltipInteractionMode = el('s-tooltip-mode').value;
@@ -549,8 +551,9 @@ const Settings = {
         el('s-chart-min-col-width').value = String(State.settings.chartMinColWidth);
         el('s-show-daemon-exits').value    = String(State.settings.showDaemonExits);
         el('s-show-lost-comm').value       = String(State.settings.showLostComm);
-        el('s-show-version-mismatch').value = String(State.settings.showVersionMismatch);
-        el('s-show-warnings').value        = String(State.settings.showWarnings);
+        el('s-show-version-mismatch').value   = String(State.settings.showVersionMismatch);
+        el('s-dedupe-version-mismatch').value  = String(State.settings.dedupeVersionMismatch);
+        el('s-show-warnings').value            = String(State.settings.showWarnings);
         el('s-show-expired').value      = String(State.settings.showExpired);
         el('s-hide-zero-tooltip').value = String(State.settings.hideZeroTooltipEntries);
         el('s-tooltip-mode').value      = State.settings.tooltipInteractionMode;
@@ -643,7 +646,9 @@ function loadFiles(fileList) {
 
     files.forEach(file => {
         readFileText(file).then(text => {
-            const evts = LogParser.parse(text, State.settings.vendorDaemon, file.name);
+            const evts = LogParser.parse(text, State.settings.vendorDaemon, file.name, {
+                dedupeVersionMismatch: State.settings.dedupeVersionMismatch
+            });
             State.events.push(...evts);
 
             // Update or add to loaded list

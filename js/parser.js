@@ -54,13 +54,14 @@ const LogParser = {
     * @param {string}  sourceFile   - Filename label attached to each event
     * @returns {Array<{date, feature, user, computer, userComputer, action, sourceFile}>}
      */
-    parse(content, vendorDaemon, sourceFile) {
+    parse(content, vendorDaemon, sourceFile, options = {}) {
         const events  = [];
         const lines   = content.split(/\r?\n/);
         let   curDate = null;
         const expiredSeen = new Set();
         const warningSeen = new Set();
         const versionMismatchSeen = new Set();
+        const dedupeVersionMismatch = options.dedupeVersionMismatch !== false;
 
         // Date pattern group 1/2: "Start-Date: Mon Jan 15 2025 09:30:15 W. …"
         //                                  or  "Time: …"
@@ -181,7 +182,7 @@ const LogParser = {
                 const clientVersion = vm[1];
                 const daemonVersion = vm[2];
                 const rawTime = this._extractTime(line);
-                if (rawTime) {
+                if (dedupeVersionMismatch && rawTime) {
                     const dedupeKey = `${sourceFile || ''}|${curDate}|${rawTime}|${clientVersion}|${daemonVersion}`;
                     if (versionMismatchSeen.has(dedupeKey)) continue;
                     versionMismatchSeen.add(dedupeKey);

@@ -35,6 +35,7 @@ Open `index.html` directly in a browser — no installation or server required.
   - Default chart type, Top N, and action visibility toggles
   - Tooltip options: hide zero values, hover-lock vs. click-to-pin, sticky delay
   - Summary card font size and horizontal scroll settings
+  - **Deduplicate Version Mismatch Events** — when enabled (default), identical version mismatch messages sharing the same timestamp are collapsed to a single event on load; disable to retain every raw occurrence
   - Settings persisted to `localStorage`; importable/exportable as JSON
 
 ### Quick Start

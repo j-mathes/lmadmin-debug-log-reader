@@ -297,6 +297,16 @@
                 </select>
             </div>
             <div class="srow">
+                <div class="slabel">
+                    <label for="s-dedupe-version-mismatch">Deduplicate Version Mismatch Events</label>
+                    <small>When enabled, identical version mismatch messages with the same timestamp are collapsed into a single event on load.</small>
+                </div>
+                <select id="s-dedupe-version-mismatch" class="sinput">
+                    <option value="true">Enabled</option>
+                    <option value="false">Disabled</option>
+                </select>
+            </div>
+            <div class="srow">
                 <div class="slabel"><label for="s-show-warnings">Show Warnings by Default</label></div>
                 <select id="s-show-warnings" class="sinput">
                     <option value="true">Enabled</option>
