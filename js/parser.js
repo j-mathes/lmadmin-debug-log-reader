@@ -55,9 +55,10 @@ const LogParser = {
     * @returns {Array<{date, feature, user, computer, userComputer, action, sourceFile}>}
      */
     parse(content, vendorDaemon, sourceFile, options = {}) {
-        const events  = [];
-        const lines   = content.split(/\r?\n/);
-        let   curDate = null;
+        const events   = [];
+        const allDates = new Set();
+        const lines    = content.split(/\r?\n/);
+        let   curDate  = null;
         const expiredSeen = new Set();
         const warningSeen = new Set();
         const versionMismatchSeen = new Set();
@@ -96,6 +97,7 @@ const LogParser = {
             if (dm) {
                 curDate = dm[1] ? this._parseDateTime(dm[1])
                                 : this._parseMDY(dm[2]);
+                if (curDate) allDates.add(curDate);
                 continue;
             }
             if (!curDate) continue;
@@ -231,7 +233,7 @@ const LogParser = {
             });
         }
 
-        return events;
+        return { events, allDates: [...allDates].sort() };
     },
 
     /**

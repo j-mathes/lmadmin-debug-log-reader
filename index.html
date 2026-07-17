@@ -322,6 +322,16 @@
             </div>
             <div class="srow">
                 <div class="slabel">
+                    <label for="s-show-empty-days">Show Days With No Usage</label>
+                    <small>When enabled, dates that appear in the log but have no matching events are still shown on the chart with a count of zero.</small>
+                </div>
+                <select id="s-show-empty-days" class="sinput">
+                    <option value="true">Enabled</option>
+                    <option value="false">Disabled</option>
+                </select>
+            </div>
+            <div class="srow">
+                <div class="slabel">
                     <label for="s-hide-zero-tooltip">Hide Zero-Value Series in Tooltip</label>
                     <small>When enabled, tooltip entries with a zero count are omitted.</small>
                 </div>

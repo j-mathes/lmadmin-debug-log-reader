@@ -36,6 +36,7 @@ Open `index.html` directly in a browser — no installation or server required.
   - Tooltip options: hide zero values, hover-lock vs. click-to-pin, sticky delay
   - Summary card font size and horizontal scroll settings
   - **Deduplicate Version Mismatch Events** — when enabled (default), identical version mismatch messages sharing the same timestamp are collapsed to a single event on load; disable to retain every raw occurrence
+  - **Show Days With No Usage** — when enabled (default), dates that appear in the log but have no matching events are still shown on the chart as zero-count points, preserving gaps in activity; disable to show only dates that have at least one event
   - Settings persisted to `localStorage`; importable/exportable as JSON
 
 ### Quick Start

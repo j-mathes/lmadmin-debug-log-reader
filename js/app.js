@@ -27,6 +27,7 @@ const DEFAULTS = {
     dedupeVersionMismatch  : true,
     showWarnings          : false,
     showExpired      : true,
+    showEmptyDays            : true,
     hideZeroTooltipEntries: true,
     tooltipInteractionMode: 'hover-lock',
     tooltipStickyDelayMs: 180,
@@ -529,6 +530,7 @@ const Settings = {
         State.settings.dedupeVersionMismatch   = el('s-dedupe-version-mismatch').value === 'true';
         State.settings.showWarnings            = el('s-show-warnings').value === 'true';
         State.settings.showExpired      = el('s-show-expired').value === 'true';
+        State.settings.showEmptyDays    = el('s-show-empty-days').value === 'true';
         State.settings.hideZeroTooltipEntries = el('s-hide-zero-tooltip').value === 'true';
         State.settings.tooltipInteractionMode = el('s-tooltip-mode').value;
         State.settings.tooltipStickyDelayMs = parseInt(el('s-tooltip-delay').value, 10) || DEFAULTS.tooltipStickyDelayMs;
@@ -555,6 +557,7 @@ const Settings = {
         el('s-dedupe-version-mismatch').value  = String(State.settings.dedupeVersionMismatch);
         el('s-show-warnings').value            = String(State.settings.showWarnings);
         el('s-show-expired').value      = String(State.settings.showExpired);
+        el('s-show-empty-days').value   = String(State.settings.showEmptyDays);
         el('s-hide-zero-tooltip').value = String(State.settings.hideZeroTooltipEntries);
         el('s-tooltip-mode').value      = State.settings.tooltipInteractionMode;
         el('s-tooltip-delay').value     = String(State.settings.tooltipStickyDelayMs);
@@ -646,7 +649,7 @@ function loadFiles(fileList) {
 
     files.forEach(file => {
         readFileText(file).then(text => {
-            const evts = LogParser.parse(text, State.settings.vendorDaemon, file.name, {
+            const { events: evts, allDates } = LogParser.parse(text, State.settings.vendorDaemon, file.name, {
                 dedupeVersionMismatch: State.settings.dedupeVersionMismatch
             });
             State.events.push(...evts);
@@ -655,10 +658,9 @@ function loadFiles(fileList) {
             const existing = State.loaded.find(f => f.name === file.name);
             if (existing) {
                 existing.count += evts.length;
+                existing.dates = [...new Set([...(existing.dates || []), ...allDates])].sort();
             } else {
-                State.loaded.push({ name: file.name, count: evts.length });
-            }
-
+                State.loaded.push({ name: file.name, count: evts.length, dates: allDates });
             pending--;
             if (pending === 0) {
                 setDateRangeFromData();
@@ -852,7 +854,20 @@ function buildChartData(events, viewBy, topN) {
         return compareLabels(left, right);
     });
 
-    const allDates = [...new Set(events.map(e => e.date))].sort();
+    let allDates;
+    if (State.settings.showEmptyDays) {
+        const from = el('date-from').value || null;
+        const to   = el('date-to').value   || null;
+        const knownSet = new Set(events.map(e => e.date));
+        State.loaded.forEach(f => (f.dates || []).forEach(d => knownSet.add(d)));
+        allDates = [...knownSet].filter(d => {
+            if (from && d < from) return false;
+            if (to   && d > to)   return false;
+            return true;
+        }).sort();
+    } else {
+        allDates = [...new Set(events.map(e => e.date))].sort();
+    }
 
     // Count per group per date
     const matrix = {};
