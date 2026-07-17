@@ -71,7 +71,7 @@ const LogParser = {
         const daemon    = this._escRx(vendorDaemon || 'geoslope');
         const userLogRe = new RegExp(
             `\\(${daemon}\\)\\s+(OUT|IN|DENIED|UNSUPPORTED):\\s+"([^"]+)"` +
-            `(?:\\s+\\(PORT_AT_HOST_PLUS\\s*\\))?\\s+(\\w+@\\w+)`
+            `(?:\\s+\\(PORT_AT_HOST_PLUS\\s*\\))?\\s+([\\w.-]+@[\\w.-]+)`
         );
         const expiredRe = new RegExp(
             `\\(${daemon}\\)\\s+EXPIRED:\\s+(?:"([^"]+)"|(\\S+))`
