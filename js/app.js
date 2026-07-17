@@ -661,6 +661,8 @@ function loadFiles(fileList) {
                 existing.dates = [...new Set([...(existing.dates || []), ...allDates])].sort();
             } else {
                 State.loaded.push({ name: file.name, count: evts.length, dates: allDates });
+            }
+
             pending--;
             if (pending === 0) {
                 setDateRangeFromData();
